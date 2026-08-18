@@ -1,122 +1,201 @@
-CREATE DATABASE ayshee_db;
-USE ayshee_db;
+-- ============================================================================
+-- ORCUS Investigation Agency - Database Schema
+-- Module  : Participants, Location & Evidence
+-- Author  : Ayshee Islam Liza (241400045)
+-- Target  : MySQL 8 / MariaDB (XAMPP)
+-- Tables  : suspect, victim, witness, location, evidence,
+--           evidence_status_history, case_suspect, case_victim,
+--           case_witness, case_location, victim_location, victim_evidence
+-- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- SUSPECT : individuals under investigation
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS suspect (
+    suspect_id          INT UNSIGNED AUTO_INCREMENT,
+    name                VARCHAR(100) NOT NULL,
+    age                 INT CHECK (age >= 0 AND age <= 120),
+    identification_sign VARCHAR(255) NULL,
+    suspicion_level     ENUM('Low', 'Medium', 'High') NOT NULL DEFAULT 'Low',
+    status              VARCHAR(50) NOT NULL DEFAULT 'Under Investigation',
+    PRIMARY KEY (suspect_id),
+    KEY idx_suspect_name (name),
+    KEY idx_suspect_suspicion (suspicion_level)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `case` (
-  `Case_ID` int(11) NOT NULL,
-  `Case_Title` varchar(150) NOT NULL,
-  `Status` varchar(30) DEFAULT 'Open',
-  `Opened_Date` date DEFAULT NULL,
-  `Assigned_Date` date DEFAULT NULL
-) 
+-- ----------------------------------------------------------------------------
+-- VICTIM : affected individuals
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS victim (
+    victim_id           INT UNSIGNED AUTO_INCREMENT,
+    name                VARCHAR(100) NOT NULL,
+    phone               VARCHAR(20) NULL,
+    age                 INT CHECK (age >= 0 AND age <= 120),
+    identification_sign VARCHAR(255) NULL,
+    victim_condition    VARCHAR(100) NULL,
+    is_deceased         BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (victim_id),
+    KEY idx_victim_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- WITNESS : witnesses and informants
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS witness (
+    witness_id          INT UNSIGNED AUTO_INCREMENT,
+    name                VARCHAR(100) NOT NULL,
+    phone               VARCHAR(20) NULL,
+    age                 INT CHECK (age >= 0 AND age <= 120),
+    identification_sign VARCHAR(255) NULL,
+    reliability_note    VARCHAR(255) NULL,
+    is_protected        BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (witness_id),
+    KEY idx_witness_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE SUSPECT (
-    Suspect_ID           INT AUTO_INCREMENT PRIMARY KEY,
-    Name                 VARCHAR(100) NOT NULL,
-    Age                  INT CHECK (Age >= 0),
-    Identification_Sign  VARCHAR(255),
-    Suspicion_Level      ENUM('Low','Medium','High') DEFAULT 'Low',
-    Status                VARCHAR(50)
-);
+-- ----------------------------------------------------------------------------
+-- LOCATION : crime scenes and incident sites
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS location (
+    location_id INT UNSIGNED AUTO_INCREMENT,
+    gps         VARCHAR(50) NULL,
+    address     VARCHAR(255) NOT NULL,
+    area        VARCHAR(100) NOT NULL,
+    city        VARCHAR(100) NOT NULL,
+    PRIMARY KEY (location_id),
+    KEY idx_location_city_area (city, area)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- EVIDENCE : items collected for cases (weak entity identified by case_id)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS evidence (
+    evidence_id         INT UNSIGNED AUTO_INCREMENT,
+    case_id             INT UNSIGNED NOT NULL,
+    evidence_no         INT UNSIGNED NOT NULL,
+    title               VARCHAR(150) NOT NULL,
+    content             TEXT NULL,
+    status              VARCHAR(50) NOT NULL DEFAULT 'Collected',
+    evidence_type       VARCHAR(50) NOT NULL,
+    collection_datetime DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (evidence_id),
+    UNIQUE KEY uq_case_evidence_no (case_id, evidence_no),
+    KEY idx_evidence_status (status),
+    KEY idx_evidence_type (evidence_type),
+    CONSTRAINT fk_evidence_case FOREIGN KEY (case_id)
+        REFERENCES `case` (case_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE VICTIM (
-    Victim_ID            INT AUTO_INCREMENT PRIMARY KEY,
-    Name                 VARCHAR(100) NOT NULL,
-    Age                  INT CHECK (Age >= 0),
-    Identification_Sign  VARCHAR(255),
-    Victim_Condition     VARCHAR(100),
-    Is_Deceased          BOOLEAN DEFAULT FALSE
-);
+-- ----------------------------------------------------------------------------
+-- EVIDENCE_STATUS_HISTORY : append-only audit trail of evidence status
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS evidence_status_history (
+    history_id   INT UNSIGNED AUTO_INCREMENT,
+    evidence_id  INT UNSIGNED NOT NULL,
+    status       VARCHAR(50) NOT NULL,
+    changed_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    remarks      VARCHAR(255) NULL,
+    PRIMARY KEY (history_id),
+    KEY idx_evidence_history_status (status),
+    KEY idx_evidence_history_changed_at (changed_at),
+    CONSTRAINT fk_evidence_history_evidence FOREIGN KEY (evidence_id)
+        REFERENCES evidence (evidence_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ----------------------------------------------------------------------------
+-- Bridge Tables (M:N Relationships)
+-- ----------------------------------------------------------------------------
 
+-- CASE_SUSPECT : links cases to suspects
+CREATE TABLE IF NOT EXISTS case_suspect (
+    case_id    INT UNSIGNED NOT NULL,
+    suspect_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (case_id, suspect_id),
+    CONSTRAINT fk_case_suspect_case FOREIGN KEY (case_id)
+        REFERENCES `case` (case_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_case_suspect_suspect FOREIGN KEY (suspect_id)
+        REFERENCES suspect (suspect_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE WITNESS (
-    Witness_ID           INT AUTO_INCREMENT PRIMARY KEY,
-    Name                 VARCHAR(100) NOT NULL,
-    Age                  INT CHECK (Age >= 0),
-    Identification_Sign  VARCHAR(255),
-    Reliability_Note     VARCHAR(255),
-    Is_Protected         BOOLEAN DEFAULT FALSE
-);
+-- CASE_VICTIM : links cases to victims
+CREATE TABLE IF NOT EXISTS case_victim (
+    case_id   INT UNSIGNED NOT NULL,
+    victim_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (case_id, victim_id),
+    CONSTRAINT fk_case_victim_case FOREIGN KEY (case_id)
+        REFERENCES `case` (case_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_case_victim_victim FOREIGN KEY (victim_id)
+        REFERENCES victim (victim_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- CASE_WITNESS : links cases to witnesses
+CREATE TABLE IF NOT EXISTS case_witness (
+    case_id    INT UNSIGNED NOT NULL,
+    witness_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (case_id, witness_id),
+    CONSTRAINT fk_case_witness_case FOREIGN KEY (case_id)
+        REFERENCES `case` (case_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_case_witness_witness FOREIGN KEY (witness_id)
+        REFERENCES witness (witness_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- CASE_LOCATION : links cases to incident locations (OCCURS_AT)
+CREATE TABLE IF NOT EXISTS case_location (
+    case_id     INT UNSIGNED NOT NULL,
+    location_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (case_id, location_id),
+    CONSTRAINT fk_case_location_case FOREIGN KEY (case_id)
+        REFERENCES `case` (case_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_case_location_location FOREIGN KEY (location_id)
+        REFERENCES location (location_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `location` (
-  `Location_ID` int(11) NOT NULL,
-  `GPS` varchar(50) DEFAULT NULL,
-  `Address` varchar(255) DEFAULT NULL,
-  `Area` varchar(100) DEFAULT NULL,
-  `City` varchar(100) DEFAULT NULL
-) 
+-- VICTIM_LOCATION : links victims to relevant locations
+CREATE TABLE IF NOT EXISTS victim_location (
+    victim_id   INT UNSIGNED NOT NULL,
+    location_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (victim_id, location_id),
+    CONSTRAINT fk_victim_location_victim FOREIGN KEY (victim_id)
+        REFERENCES victim (victim_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_victim_location_location FOREIGN KEY (location_id)
+        REFERENCES location (location_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-
-CREATE TABLE EVIDENCE (
-    Evidence_Number      INT AUTO_INCREMENT PRIMARY KEY,
-    Title                VARCHAR(150) NOT NULL,
-    Content              TEXT,
-    Status               VARCHAR(50) DEFAULT 'Collected',
-    Evidence_Type        VARCHAR(50),
-    Collection_DateTime  DATETIME
-);
-
-
-
-CREATE TABLE EVIDENCE_STATUS_HISTORY (
-    History_ID       INT AUTO_INCREMENT PRIMARY KEY,
-    Evidence_Number  INT NOT NULL,
-    Status           VARCHAR(50) NOT NULL,
-    Changed_At       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    Remarks          VARCHAR(255),
-    FOREIGN KEY (Evidence_Number) REFERENCES EVIDENCE(Evidence_Number) ON DELETE CASCADE
-);
-
-
-
-CREATE TABLE CASE_SUSPECT (
-    Case_ID     INT NOT NULL,
-    Suspect_ID  INT NOT NULL,
-    PRIMARY KEY (Case_ID, Suspect_ID),
-    FOREIGN KEY (Case_ID) REFERENCES `CASE`(Case_ID) ON DELETE RESTRICT,
-    FOREIGN KEY (Suspect_ID) REFERENCES SUSPECT(Suspect_ID) ON DELETE CASCADE
-);
-
-CREATE TABLE CASE_VICTIM (
-    Case_ID    INT NOT NULL,
-    Victim_ID  INT NOT NULL,
-    PRIMARY KEY (Case_ID, Victim_ID),
-    FOREIGN KEY (Case_ID) REFERENCES `CASE`(Case_ID) ON DELETE RESTRICT,
-    FOREIGN KEY (Victim_ID) REFERENCES VICTIM(Victim_ID) ON DELETE CASCADE
-);
-
-CREATE TABLE CASE_WITNESS (
-    Case_ID     INT NOT NULL,
-    Witness_ID  INT NOT NULL,
-    PRIMARY KEY (Case_ID, Witness_ID),
-    FOREIGN KEY (Case_ID) REFERENCES `CASE`(Case_ID) ON DELETE RESTRICT,
-    FOREIGN KEY (Witness_ID) REFERENCES WITNESS(Witness_ID) ON DELETE CASCADE
-);
-
-CREATE TABLE VICTIM_LOCATION (
-    Victim_ID    INT NOT NULL,
-    Location_ID  INT NOT NULL,
-    PRIMARY KEY (Victim_ID, Location_ID),
-    FOREIGN KEY (Victim_ID) REFERENCES VICTIM(Victim_ID) ON DELETE CASCADE,
-    FOREIGN KEY (Location_ID) REFERENCES LOCATION(Location_ID) ON DELETE CASCADE
-);
-
-CREATE TABLE VICTIM_EVIDENCE (
-    Victim_ID        INT NOT NULL,
-    Evidence_Number  INT NOT NULL,
-    PRIMARY KEY (Victim_ID, Evidence_Number),
-    FOREIGN KEY (Victim_ID) REFERENCES VICTIM(Victim_ID) ON DELETE CASCADE,
-    FOREIGN KEY (Evidence_Number) REFERENCES EVIDENCE(Evidence_Number) ON DELETE CASCADE
-);
-
-
-
-CREATE INDEX idx_suspect_name    ON SUSPECT(Name);
-CREATE INDEX idx_victim_name     ON VICTIM(Name);
-CREATE INDEX idx_witness_name    ON WITNESS(Name);
-CREATE INDEX idx_evidence_status ON EVIDENCE_STATUS_HISTORY(Status);
+-- VICTIM_EVIDENCE : links victims to relevant evidence items
+CREATE TABLE IF NOT EXISTS victim_evidence (
+    victim_id   INT UNSIGNED NOT NULL,
+    evidence_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (victim_id, evidence_id),
+    CONSTRAINT fk_victim_evidence_victim FOREIGN KEY (victim_id)
+        REFERENCES victim (victim_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_victim_evidence_evidence FOREIGN KEY (evidence_id)
+        REFERENCES evidence (evidence_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
