@@ -84,15 +84,21 @@ function switchSubtab(subtabId) {
 
   const target = document.getElementById(subtabId);
   if (target) target.classList.add('active');
-  if (event && event.target) event.target.classList.add('active');
+  if (typeof window !== 'undefined' && window.event && window.event.target) {
+    window.event.target.classList.add('active');
+  }
 }
 
 // ----------------------------------------------------------------------------
 // Authentication & Quick Switcher
 // ----------------------------------------------------------------------------
 async function quickLogin(username, password, label) {
-  document.querySelectorAll('.quick-login-btn').forEach(btn => btn.classList.remove('active'));
-  if (event && event.target) event.target.classList.add('active');
+  document.querySelectorAll('.quick-login-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.innerText.toLowerCase().includes(username.split('_')[0].toLowerCase())) {
+      btn.classList.add('active');
+    }
+  });
 
   const res = await apiRequest('/auth/login', 'POST', { username, password });
   if (res.ok && res.data.data && res.data.data.token) {
@@ -546,8 +552,10 @@ async function inspectEvidenceChain(evidenceID) {
 // Tab 7: SQL Views Inspector
 // ----------------------------------------------------------------------------
 async function loadViewData(viewName) {
-  document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
-  if (event && event.target) event.target.classList.add('active');
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.innerText.includes(viewName)) btn.classList.add('active');
+  });
 
   document.getElementById('currentViewTitle').innerText = `View: ${viewName}`;
   const thead = document.getElementById('viewDynamicHead');

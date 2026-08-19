@@ -49,8 +49,12 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 
 	indexFile := filepath.Join(staticDir, "index.html")
 	if _, err := os.Stat(indexFile); err == nil {
-		r.Static("/ui", staticDir)
 		r.StaticFile("/", indexFile)
+		r.StaticFile("/index.html", indexFile)
+		r.StaticFile("/styles.css", filepath.Join(staticDir, "styles.css"))
+		r.StaticFile("/app.js", filepath.Join(staticDir, "app.js"))
+		r.Static("/ui", staticDir)
+		r.Static("/static", staticDir)
 	}
 
 	api := r.Group("/api/v1")
