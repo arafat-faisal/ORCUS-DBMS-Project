@@ -36,6 +36,10 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.LoggerMiddleware(), middleware.CORSMiddleware())
 
+	// Serve static testing frontend dashboard
+	r.Static("/ui", "./test-frontend")
+	r.StaticFile("/", "./test-frontend/index.html")
+
 	api := r.Group("/api/v1")
 	{
 		// ====================================================================
