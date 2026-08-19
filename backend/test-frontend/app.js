@@ -377,7 +377,7 @@ async function inspectCaseDossier(caseID) {
       </div>
 
       <div class="dossier-section">
-        <h4>📜 Status Transition History (`case_status_history`)</h4>
+        <h4>📜 Status Transition History (case_status_history)</h4>
         ${(d.status_history && d.status_history.length > 0) ? d.status_history.map(h => `
           <div style="font-size:11.5px; margin-bottom:6px; padding-left:10px; border-left:2px solid #3b82f6;">
             <strong>${h.status}</strong> by <em>${h.changed_by || 'System'}</em> at ${h.changed_at ? h.changed_at.split('T')[0] : ''}
