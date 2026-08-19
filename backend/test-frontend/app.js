@@ -11,17 +11,15 @@ function getBaseUrl() {
   if (input && input.value && input.value.trim() !== '') {
     return input.value.trim().replace(/\/+$/, '');
   }
-  if (window.location.origin && window.location.origin.startsWith('http')) {
-    return `${window.location.origin}/api/v1`;
-  }
-  return 'http://localhost:5050/api/v1';
+  return '/api/v1';
 }
 
 // ----------------------------------------------------------------------------
 // API Helper
 // ----------------------------------------------------------------------------
 async function apiRequest(endpoint, method = 'GET', body = null) {
-  const url = `${getBaseUrl()}${endpoint}`;
+  const base = getBaseUrl();
+  const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
   const headers = { 'Content-Type': 'application/json' };
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
@@ -49,6 +47,7 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 // ----------------------------------------------------------------------------
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
+  if (!toast) return;
   toast.className = `toast ${type}`;
   toast.innerText = message;
   toast.classList.remove('hidden');
@@ -100,41 +99,53 @@ async function quickLogin(username, password, label) {
     }
   });
 
+  const pill = document.getElementById('serverStatusPill');
+  const pillText = document.getElementById('serverStatusText');
+
   const res = await apiRequest('/auth/login', 'POST', { username, password });
   if (res.ok && res.data.data && res.data.data.token) {
     authToken = res.data.data.token;
     currentUser = res.data.data.user;
     localStorage.setItem('orcus_test_token', authToken);
     updateUserBadge(currentUser);
+    if (pill && pillText) {
+      pill.style.background = 'rgba(16, 185, 129, 0.15)';
+      pill.style.color = '#34d399';
+      pillText.innerText = 'Connected: MySQL 8.0 (Live)';
+    }
     showToast(`Logged in as ${label}`, 'success');
     loadOverviewData();
   } else {
-    showToast(`Login failed: ${res.data?.error || res.error}`, 'error');
+    if (pill && pillText) {
+      pill.style.background = 'rgba(244, 63, 94, 0.15)';
+      pill.style.color = '#fb7185';
+      pillText.innerText = 'Connection Failed (Check Server)';
+    }
+    showToast(`Login failed: ${res.data?.error || res.error || 'Server unreachable'}`, 'error');
   }
 }
 
 async function verifySession() {
+  const pill = document.getElementById('serverStatusPill');
+  const pillText = document.getElementById('serverStatusText');
+
   if (!authToken) {
-    quickLogin('admin_faisal', 'password123', 'Admin Faisal');
+    await quickLogin('admin_faisal', 'password123', 'Admin Faisal');
     return;
   }
 
   const res = await apiRequest('/auth/me');
-  const pill = document.getElementById('serverStatusPill');
-  const pillText = document.getElementById('serverStatusText');
-
   if (res.ok && res.data.data) {
     currentUser = res.data.data;
     updateUserBadge(currentUser);
-    pill.style.background = 'rgba(16, 185, 129, 0.15)';
-    pill.style.color = '#34d399';
-    pillText.innerText = 'Connected: MySQL 8.0 (Live)';
+    if (pill && pillText) {
+      pill.style.background = 'rgba(16, 185, 129, 0.15)';
+      pill.style.color = '#34d399';
+      pillText.innerText = 'Connected: MySQL 8.0 (Live)';
+    }
     loadOverviewData();
   } else {
-    pill.style.background = 'rgba(244, 63, 94, 0.15)';
-    pill.style.color = '#fb7185';
-    pillText.innerText = 'Session Expired / Reconnecting...';
-    quickLogin('admin_faisal', 'password123', 'Admin Faisal');
+    await quickLogin('admin_faisal', 'password123', 'Admin Faisal');
   }
 }
 
