@@ -1,996 +1,551 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ORCUS — Testing & Diagnostic Dashboard</title>
+  <title>ORCUS — Tactical Intelligence & Case Tracking System</title>
+  
+  <!-- Modern Font & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet GIS Map Library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Custom Styles -->
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-theme">
-  <!-- Top Navigation Bar -->
-  <header class="top-nav">
-    <div class="nav-brand">
-      <div class="logo-icon">⚖️</div>
-      <div class="brand-text">
-        <h1>ORCUS</h1>
-        <span class="brand-sub">Investigation Management — Test Console</span>
-      </div>
+<body>
+
+  <!-- ========================================================================
+       SLIM LEFT ICON NAVIGATION BAR
+       ======================================================================== -->
+  <aside class="icon-sidebar">
+    <!-- Brand Logo Emblem -->
+    <div class="brand-badge" onclick="switchWorkspaceMode('map')" title="ORCUS Tactical Intelligence">
+      <img src="assets/orcus-logo.jpg" alt="ORCUS" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'%2310b981\'><polygon points=\'12 2 2 7 12 22 22 7\'/></svg>'">
     </div>
 
-    <div class="nav-status-group">
-      <div class="server-status-pill" id="serverStatusPill">
-        <span class="status-dot"></span>
-        <span id="serverStatusText">Connecting to API...</span>
-      </div>
-      <div class="active-user-badge" id="activeUserBadge">
-        <span class="user-avatar" id="userAvatar">?</span>
-        <div class="user-meta">
-          <span class="user-name" id="navUsername">Not Logged In</span>
-          <span class="user-role" id="navUserRole">Guest</span>
-        </div>
-      </div>
+    <!-- Mode & Navigation Icons -->
+    <div class="icon-nav-group">
+      <button class="icon-btn active" id="btnModeMap" onclick="switchWorkspaceMode('map')" title="Tactical GIS Map (Mode 1)">
+        🗺️
+      </button>
+      <button class="icon-btn" id="btnModeGraph" onclick="switchWorkspaceMode('graph')" title="Link Analysis Entity Graph (Mode 2)">
+        🕸️
+        <span class="icon-badge">44</span>
+      </button>
+      <button class="icon-btn" id="btnModeAnalytics" onclick="switchWorkspaceMode('analytics')" title="Sankey Flow & Crime Breakdown (Mode 3)">
+        📊
+      </button>
+      <button class="icon-btn" id="btnModeTables" onclick="switchWorkspaceMode('tables')" title="Database Management Tables (Mode 4)">
+        📁
+      </button>
     </div>
-  </header>
 
-  <div class="app-layout">
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-      <div class="quick-auth-section">
-        <div class="section-title">⚡ Quick Login Switcher</div>
-        <div class="quick-auth-buttons">
-          <button class="quick-login-btn active" onclick="quickLogin('admin_faisal', 'password123', 'Admin (Faisal)')">
-            🛡️ Admin Faisal
-          </button>
-          <button class="quick-login-btn" onclick="quickLogin('investigator_sarah', 'password123', 'Lead Investigator')">
-            🕵️ Lead Sarah
-          </button>
-          <button class="quick-login-btn" onclick="quickLogin('detective_fahim', 'password123', 'Field Detective')">
-            🔍 Detective Fahim
-          </button>
-          <button class="quick-login-btn" onclick="quickLogin('forensic_tariq', 'password123', 'Forensic Spec.')">
-            🔬 Forensic Tariq
-          </button>
+    <!-- Footer Icons -->
+    <div class="icon-sidebar-footer">
+      <button class="icon-btn" onclick="openModal('quickHelpModal')" title="System Documentation & Shortcuts">
+        ⚙️
+      </button>
+      <button class="icon-btn theme-toggle-btn" id="sidebarThemeBtn" onclick="toggleTheme()" title="Toggle Light / Dark Theme">
+        ☀️
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       MAIN APPLICATION WORKSPACE
+       ======================================================================== -->
+  <div class="app-container">
+
+    <!-- Top Tactical HUD Header -->
+    <header class="tactical-hud-header">
+      <div class="hud-left">
+        <div class="investigation-dropdown" onclick="populateCaseQuickSelect()" id="caseHeaderDropdown">
+          <span style="color:var(--emerald-neon);">🛡️ ORCUS</span>
+          <span id="activeCaseHeaderTitle">Investigation: Operation Cyber Shadow</span>
+          <small style="color:var(--text-muted);">▼</small>
+        </div>
+
+        <div class="hud-pill alert" id="hudTopAlerts">
+          <span>⚠️</span> 3 top alerts
+        </div>
+        <div class="hud-pill" id="hudTopEntities">
+          <span>👥</span> <span id="hudEntityCount">8</span> entities
+        </div>
+        <div class="hud-pill" id="hudTopLocation">
+          <span>📍</span> <span id="hudLocationText">Dhaka Metro</span>
         </div>
       </div>
 
-      <nav class="sidebar-nav">
-        <div class="section-title">📁 Modules & Views</div>
-        <button class="nav-item active" data-tab="tab-overview" onclick="switchTab('tab-overview')">
-          <span class="nav-icon">📊</span> Overview & KPIs
+      <!-- Center Mode Switcher Tabs -->
+      <div class="hud-center-modes">
+        <button class="mode-tab-btn active" onclick="switchWorkspaceMode('map')">
+          <span>🗺️</span> Tactical Map
         </button>
-        <button class="nav-item" data-tab="tab-org" onclick="switchTab('tab-org')">
-          <span class="nav-icon">🏢</span> Branches & Officers
+        <button class="mode-tab-btn" onclick="switchWorkspaceMode('graph')">
+          <span>🕸️</span> Link Graph
         </button>
-        <button class="nav-item" data-tab="tab-intake" onclick="switchTab('tab-intake')">
-          <span class="nav-icon">📝</span> Intake (GD & FIR)
+        <button class="mode-tab-btn" onclick="switchWorkspaceMode('analytics')">
+          <span>📊</span> Crime Pipeline
         </button>
-        <button class="nav-item" data-tab="tab-cases" onclick="switchTab('tab-cases')">
-          <span class="nav-icon">📁</span> Cases & Dossier
+        <button class="mode-tab-btn" onclick="switchWorkspaceMode('tables')">
+          <span>📁</span> Database Tables
         </button>
-        <button class="nav-item" data-tab="tab-participants" onclick="switchTab('tab-participants')">
-          <span class="nav-icon">👥</span> Suspects & People
-        </button>
-        <button class="nav-item" data-tab="tab-evidence" onclick="switchTab('tab-evidence')">
-          <span class="nav-icon">📦</span> Evidence & Chain
-        </button>
-        <button class="nav-item" data-tab="tab-views" onclick="switchTab('tab-views')">
-          <span class="nav-icon">👁️</span> SQL Views Inspector
-        </button>
-        <button class="nav-item" data-tab="tab-console" onclick="switchTab('tab-console')">
-          <span class="nav-icon">⚡</span> Raw API Console
-        </button>
-      </nav>
+      </div>
 
-      <div class="sidebar-footer">
-        <div class="server-config">
-          <label>API Base URL:</label>
-          <input type="text" id="apiBaseUrl" value="/api/v1" placeholder="/api/v1">
+      <!-- Right HUD Controls -->
+      <div class="hud-right">
+        <!-- Live Server Status Indicator -->
+        <div class="hud-pill" id="serverStatusPill" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">
+          <span>🟢</span> <span id="serverStatusText">83% Battery / Live Sync</span>
+        </div>
+
+        <!-- Quick Role Switcher -->
+        <select class="role-switcher-select" id="roleSwitcher" onchange="handleRoleSwitch(this.value)">
+          <option value="admin_faisal">Admin Faisal (Admin/Lead)</option>
+          <option value="investigator_sarah">Lead Sarah (Lead Investigator)</option>
+          <option value="detective_fahim">Detective Fahim (Field Detective)</option>
+          <option value="forensic_tariq">Forensic Tariq (Forensics)</option>
+        </select>
+
+        <!-- Theme Toggle Switch -->
+        <button class="theme-toggle-btn" onclick="toggleTheme()" id="themeToggleBtn" title="Switch Theme">
+          🌙
+        </button>
+
+        <!-- User Profile Avatar -->
+        <div class="user-profile-badge">
+          <div class="user-avatar-ring" id="userAvatar">F</div>
+          <span id="navUsername" style="font-weight:600; font-size:11.5px;">admin_faisal</span>
         </div>
       </div>
-    </aside>
+    </header>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <!-- Alert / Notification Toast -->
-      <div id="toast" class="toast hidden"></div>
+    <!-- Middle Split Workspace -->
+    <div class="workspace-body">
 
-      <!-- ================================================================= -->
-      <!-- TAB 1: OVERVIEW & KPIS -->
-      <!-- ================================================================= -->
-      <section id="tab-overview" class="tab-pane active">
-        <div class="view-header">
-          <div>
-            <h2>Executive Dashboard & Real-Time Metrics</h2>
-            <p class="subtitle">Live database counters and investigation pipeline status</p>
-          </div>
-          <button class="btn btn-primary" onclick="loadOverviewData()">🔄 Refresh Metrics</button>
-        </div>
-
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-icon blue">📁</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Active Cases</span>
-              <span class="kpi-value" id="kpiActiveCases">-</span>
-            </div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon indigo">📊</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Total Cases</span>
-              <span class="kpi-value" id="kpiTotalCases">-</span>
-            </div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon amber">⏳</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Pending FIRs</span>
-              <span class="kpi-value" id="kpiPendingFIRs">-</span>
-            </div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon purple">📦</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Evidence Items</span>
-              <span class="kpi-value" id="kpiEvidence">-</span>
-            </div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon teal">👮</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Sworn Officers</span>
-              <span class="kpi-value" id="kpiOfficers">-</span>
-            </div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-icon emerald">🏢</div>
-            <div class="kpi-details">
-              <span class="kpi-label">Agency Branches</span>
-              <span class="kpi-value" id="kpiBranches">-</span>
-            </div>
+      <!-- ====================================================================
+           LEFT PANEL: INTELLIGENCE DOSSIER & PERSON OF INTEREST CARDS
+           ==================================================================== -->
+      <aside class="dossier-panel">
+        <div class="dossier-panel-header">
+          <div class="case-headline" id="dossierCaseTitle">Armed Robbery at Dhanmondi Vault</div>
+          <div class="case-submeta">
+            <span>Case Owner: <strong id="dossierCaseOwner" style="color:var(--text-primary);">Arafat Faisal</strong></span>
+            <span>Case Number: <strong id="dossierCaseNo" style="color:var(--cyan-neon);">#ORC-029128</strong></span>
           </div>
         </div>
 
-        <div class="content-split-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>🚨 Case Intake Pipeline (`v_fir_case_pipeline`)</h3>
+        <!-- Dossier Dynamic Cards Container -->
+        <div class="dossier-scroll-area" id="dossierScrollArea">
+          <!-- Person of Interest Card 1 -->
+          <div class="entity-card">
+            <div class="entity-card-top">
+              <span class="tag-poi">Person of Interest</span>
+              <button class="btn-sm" style="background:transparent; border:none; color:var(--text-muted);" onclick="openCaseStatusModal()">⋮</button>
             </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>FIR No</th>
-                    <th>Category</th>
-                    <th>Filed Date</th>
-                    <th>Complainant</th>
-                    <th>Case Title</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="pipelineTableBody">
-                  <tr><td colspan="6" class="text-center">Loading pipeline data...</td></tr>
-                </tbody>
-              </table>
+            
+            <div class="entity-name" id="dossierSuspectName">Timothée Chalamet (Alias: Phantom)</div>
+            
+            <!-- Mugshot Carousel -->
+            <div class="mugshots-strip">
+              <img class="mugshot-thumb" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop&crop=face" alt="Mugshot 1">
+              <img class="mugshot-thumb" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&h=120&fit=crop&crop=face" alt="Mugshot 2">
+              <img class="mugshot-thumb" src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=120&h=120&fit=crop&crop=face" alt="Mugshot 3">
+              <img class="mugshot-thumb" src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&h=120&fit=crop&crop=face" alt="Mugshot 4">
             </div>
-          </div>
 
-          <div class="panel">
-            <div class="panel-header">
-              <h3>⚖️ Officer Workload Overview (`v_officer_caseload`)</h3>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Officer</th>
-                    <th>Rank</th>
-                    <th>Branch</th>
-                    <th>Total</th>
-                    <th>Active</th>
-                  </tr>
-                </thead>
-                <tbody id="caseloadSummaryTableBody">
-                  <tr><td colspan="5" class="text-center">Loading caseload...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================= -->
-      <!-- TAB 2: ORGANIZATION & PERSONNEL -->
-      <!-- ================================================================= -->
-      <section id="tab-org" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Organization & Access Control (Module 1 — Faisal)</h2>
-            <p class="subtitle">Agency Branches, Personnel Roster, and Workload Reports</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="openModal('createBranchModal')">➕ Add Branch</button>
-            <button class="btn btn-primary" onclick="openModal('createOfficerModal')">➕ Register Officer</button>
-          </div>
-        </div>
-
-        <div class="content-split-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>🏢 Agency Branches</h3>
-              <button class="btn-sm" onclick="loadBranches()">Refresh</button>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Branch Name</th>
-                    <th>District</th>
-                  </tr>
-                </thead>
-                <tbody id="branchesTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <h3>👮 Sworn Officers Directory</h3>
-              <div class="search-box-sm">
-                <input type="text" id="officerSearchInput" placeholder="Search name/badge..." oninput="filterOfficers()">
+            <div class="entity-specs-grid">
+              <div class="spec-item">
+                <label>Case ID:</label>
+                <span id="dossierSpecCase">#029128AF26</span>
               </div>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Badge</th>
-                    <th>Name</th>
-                    <th>Rank</th>
-                    <th>Branch</th>
-                  </tr>
-                </thead>
-                <tbody id="officersTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================= -->
-      <!-- TAB 3: INVESTIGATION INTAKE -->
-      <!-- ================================================================= -->
-      <section id="tab-intake" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Investigation Intake (Module 2 — Shakil)</h2>
-            <p class="subtitle">Complainants, General Diary (GD), and FIR Filing with Legal Sections</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="openModal('createComplainantModal')">➕ Register Complainant</button>
-            <button class="btn btn-secondary" onclick="openModal('createGDModal')">➕ File GD</button>
-            <button class="btn btn-primary" onclick="openModal('createFIRModal')">➕ File FIR</button>
-          </div>
-        </div>
-
-        <div class="tab-subnav">
-          <button class="subtab-btn active" onclick="switchSubtab('subtab-complainants')">Complainants & Contacts</button>
-          <button class="subtab-btn" onclick="switchSubtab('subtab-gds')">General Diaries (GD)</button>
-          <button class="subtab-btn" onclick="switchSubtab('subtab-firs')">First Information Reports (FIR)</button>
-        </div>
-
-        <div id="subtab-complainants" class="subtab-content active">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Complainant Name</th>
-                    <th>Normalized Contacts (Phone / Email)</th>
-                  </tr>
-                </thead>
-                <tbody id="complainantsTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div id="subtab-gds" class="subtab-content">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>GD Number</th>
-                    <th>Date</th>
-                    <th>Complainant</th>
-                    <th>Subject</th>
-                  </tr>
-                </thead>
-                <tbody id="gdsTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div id="subtab-firs" class="subtab-content">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>FIR Number</th>
-                    <th>Category</th>
-                    <th>Filed Date</th>
-                    <th>GD Ref</th>
-                    <th>Statutory Penal Code Sections</th>
-                  </tr>
-                </thead>
-                <tbody id="firsTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================= -->
-      <!-- TAB 4: CASE MANAGEMENT & DOSSIER -->
-      <!-- ================================================================= -->
-      <section id="tab-cases" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Case Management & Investigation Dossier</h2>
-            <p class="subtitle">Multi-criteria Case Search, Lifecycle Transitions, and Unified Dossiers</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('openCaseModal')">➕ Open New Case</button>
-        </div>
-
-        <div class="filter-bar">
-          <div class="filter-group">
-            <input type="text" id="caseSearchInput" placeholder="Search case title or officer..." oninput="loadCases()">
-          </div>
-          <div class="filter-group">
-            <select id="caseStatusFilter" onchange="loadCases()">
-              <option value="">All Statuses</option>
-              <option value="Open">Open</option>
-              <option value="Under Investigation">Under Investigation</option>
-              <option value="Pending Review">Pending Review</option>
-              <option value="Closed">Closed</option>
-              <option value="Reopened">Reopened</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary" onclick="loadCases()">Apply Filter</button>
-        </div>
-
-        <div class="content-split-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>📁 Cases List (`v_case_overview`)</h3>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Case Title</th>
-                    <th>Status</th>
-                    <th>Lead Officer</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="casesTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <h3>🔍 Case Dossier Viewer</h3>
-              <div id="dossierActions" class="hidden">
-                <button class="btn-sm btn-amber" onclick="openCaseStatusModal()">Update Status</button>
+              <div class="spec-item">
+                <label>Risk Level:</label>
+                <span class="badge badge-rose" id="dossierSpecRisk">Critical High ⚡</span>
               </div>
-            </div>
-            <div id="caseDossierContainer" class="dossier-box">
-              <div class="placeholder-text">Select a case from the left table to inspect the comprehensive dossier.</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================= -->
-      <!-- TAB 5: PARTICIPANTS & LOCATIONS -->
-      <!-- ================================================================= -->
-      <section id="tab-participants" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Participants & Locations (Module 3 — Liza)</h2>
-            <p class="subtitle">Suspects, Victims, Witnesses, and Crime Scene Locations</p>
-          </div>
-          <div class="header-actions">
-            <button class="btn btn-secondary" onclick="openModal('createSuspectModal')">➕ Add Suspect</button>
-            <button class="btn btn-secondary" onclick="openModal('createVictimModal')">➕ Add Victim</button>
-            <button class="btn btn-secondary" onclick="openModal('createWitnessModal')">➕ Add Witness</button>
-            <button class="btn btn-primary" onclick="openModal('createLocationModal')">➕ Add Location</button>
-          </div>
-        </div>
-
-        <div class="tab-subnav">
-          <button class="subtab-btn active" onclick="switchSubtab('subtab-suspects')">Suspects Directory & Dossier</button>
-          <button class="subtab-btn" onclick="switchSubtab('subtab-victims')">Victims</button>
-          <button class="subtab-btn" onclick="switchSubtab('subtab-witnesses')">Witnesses</button>
-          <button class="subtab-btn" onclick="switchSubtab('subtab-locations')">Locations</button>
-        </div>
-
-        <div id="subtab-suspects" class="subtab-content active">
-          <div class="content-split-grid">
-            <div class="panel">
-              <div class="panel-header">
-                <h3>🦹 Registered Suspects</h3>
+              <div class="spec-item">
+                <label>Place of Birth:</label>
+                <span>Dhaka, Bangladesh</span>
               </div>
-              <div class="table-container">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Name</th>
-                      <th>Risk</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="suspectsTableBody"></tbody>
-                </table>
+              <div class="spec-item">
+                <label>Date of Birth:</label>
+                <span>1st Jun, 1992</span>
+              </div>
+              <div class="spec-item">
+                <label>Address:</label>
+                <span>Road 27, Dhanmondi</span>
+              </div>
+              <div class="spec-item">
+                <label>Occupation:</label>
+                <span>Cyber Systems Eng.</span>
               </div>
             </div>
 
-            <div class="panel">
-              <div class="panel-header">
-                <h3>📑 Cross-Case Criminal Profile (`v_suspect_dossier`)</h3>
-              </div>
-              <div id="suspectDossierBox" class="dossier-box">
-                <div class="placeholder-text">Click "View Profile" on any suspect to view all connected cases and roles.</div>
-              </div>
+            <div class="entity-justification">
+              <strong>Role in Crime:</strong> <span id="dossierRoleText">Suspicious individual spotted monitoring vault telemetry and vehicle departure times.</span>
+            </div>
+
+            <div class="entity-card-footer">
+              <span class="badge badge-amber" id="dossierStatusBadge">Under Investigation</span>
+              <a class="link-btn" onclick="openSuspectModalDirectly()">View full criminal dossier ↗</a>
+            </div>
+          </div>
+
+          <!-- Registered Physical Evidence Card -->
+          <div class="entity-card">
+            <div class="entity-card-top">
+              <span class="badge badge-purple">Registered Evidence</span>
+              <span class="badge badge-emerald" id="dossierEvidenceCount">Item #1 of 3</span>
+            </div>
+            <div class="entity-name" id="dossierEvidenceTitle">CCTV Hard Drive & Server Logs</div>
+            <p style="font-size:11.5px; color:var(--text-secondary);" id="dossierEvidenceDesc">
+              Recovered from main security desk. Stored at Vault B-14 under forensic chain of custody.
+            </p>
+            <div class="entity-card-footer">
+              <span style="font-size:10.5px; color:var(--text-muted);">Storage: <strong style="color:var(--text-primary);">Vault B-14</strong></span>
+              <a class="link-btn" onclick="openEvidenceChainDirectly()">Inspect Chain ↗</a>
             </div>
           </div>
         </div>
 
-        <div id="subtab-victims" class="subtab-content">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Condition / Notes</th>
-                    <th>Deceased</th>
-                  </tr>
-                </thead>
-                <tbody id="victimsTableBody"></tbody>
-              </table>
-            </div>
+        <!-- Bottom Prompt Command Bar -->
+        <div class="dossier-command-bar">
+          <div class="command-input-wrap">
+            <input type="text" class="command-input" id="commandQueryInput" placeholder="Type your investigation query or command..." onkeydown="handleCommandKey(event)">
+            <span class="command-icon">⏎</span>
           </div>
         </div>
+      </aside>
 
-        <div id="subtab-witnesses" class="subtab-content">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Reliability</th>
-                    <th>Protected Status</th>
-                    <th>Statement Summary</th>
-                  </tr>
-                </thead>
-                <tbody id="witnessesTableBody"></tbody>
-              </table>
-            </div>
+      <!-- ====================================================================
+           CENTER MULTI-MODE TACTICAL WORKSPACE
+           ==================================================================== -->
+      <main class="main-workspace">
+
+        <!-- Mode 1: GIS Tactical Crime Map -->
+        <section class="workspace-pane active" id="pane-map">
+          <div id="leafletMapContainer"></div>
+
+          <!-- Floating Map Tactical Toolbar -->
+          <div class="map-floating-toolbar">
+            <button class="map-tool-btn active" onclick="toggleMapRoutes()" title="Toggle Suspect GPS Patrol Route">↖</button>
+            <button class="map-tool-btn" onclick="centerMapOnDhaka()" title="Center on Capital District">✢</button>
+            <button class="map-tool-btn" onclick="filterMapMarkers('all')" title="Show All Markers">📍</button>
+            <button class="map-tool-btn" onclick="filterMapMarkers('crime')" title="Crime Scenes Only">🚨</button>
+            <button class="map-tool-btn" onclick="filterMapMarkers('evidence')" title="Evidence Vaults Only">📦</button>
+            <button class="map-tool-btn" onclick="zoomInMap()" title="Zoom In">+</button>
+            <button class="map-tool-btn" onclick="zoomOutMap()" title="Zoom Out">−</button>
           </div>
-        </div>
+        </section>
 
-        <div id="subtab-locations" class="subtab-content">
-          <div class="panel">
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Address</th>
-                    <th>Area</th>
-                    <th>City</th>
-                    <th>GPS Coordinates</th>
-                  </tr>
-                </thead>
-                <tbody id="locationsTableBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
+        <!-- Mode 2: Link Analysis Entity Graph -->
+        <section class="workspace-pane" id="pane-graph">
+          <canvas id="linkGraphCanvas"></canvas>
 
-      <!-- ================================================================= -->
-      <!-- TAB 6: EVIDENCE & CHAIN OF CUSTODY -->
-      <!-- ================================================================= -->
-      <section id="tab-evidence" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Evidence & Chain of Custody (Module 3 — Liza)</h2>
-            <p class="subtitle">Weak Entity Item Tracking and Atomic Status Transition Audit Trails</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('createEvidenceModal')">➕ Register Evidence</button>
-        </div>
-
-        <div class="content-split-grid">
-          <div class="panel">
-            <div class="panel-header">
-              <h3>📦 Evidence Inventory</h3>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Case</th>
-                    <th>Item #</th>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="evidenceTableBody"></tbody>
-              </table>
-            </div>
+          <!-- Graph Floating Controls -->
+          <div class="graph-floating-controls">
+            <button class="btn btn-secondary" onclick="exportGraphSVG()">Export as SVG</button>
+            <button class="btn btn-secondary" onclick="exportGraphJSON()">Export as JSON</button>
+            <button class="btn btn-primary" onclick="resetGraphPhysics()">Reset Layout</button>
           </div>
 
-          <div class="panel">
-            <div class="panel-header">
-              <h3>⛓️ Chain of Custody Timeline (`v_evidence_chain_of_custody`)</h3>
-              <button class="btn-sm btn-amber hidden" id="btnUpdateEvidenceStatus" onclick="openEvidenceStatusModal()">Update Custody</button>
-            </div>
-            <div id="chainTimelineContainer" class="dossier-box">
-              <div class="placeholder-text">Select an evidence item to view its complete audit history and custody log.</div>
-            </div>
+          <!-- Graph Legend -->
+          <div class="graph-legend">
+            <div style="font-weight:700; color:var(--text-primary); margin-bottom:2px;">Entity Graph Legend</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--blue-tactical);"></div> Case File</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--rose-danger);"></div> Suspect / Person of Interest</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--amber-warning);"></div> Victim</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--cyan-neon);"></div> Witness</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--purple-tactical);"></div> Physical Evidence</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--emerald-neon);"></div> Police Branch / Officer</div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- ================================================================= -->
-      <!-- TAB 7: SQL VIEWS INSPECTOR -->
-      <!-- ================================================================= -->
-      <section id="tab-views" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Database Views Inspector</h2>
-            <p class="subtitle">Direct inspection of precompiled SQL analytical views</p>
-          </div>
-        </div>
-
-        <div class="views-selector">
-          <button class="view-btn active" onclick="loadViewData('v_case_overview')">1. v_case_overview</button>
-          <button class="view-btn" onclick="loadViewData('v_officer_caseload')">2. v_officer_caseload</button>
-          <button class="view-btn" onclick="loadViewData('v_fir_case_pipeline')">3. v_fir_case_pipeline</button>
-          <button class="view-btn" onclick="loadViewData('v_evidence_chain_of_custody')">4. v_evidence_chain_of_custody</button>
-          <button class="view-btn" onclick="loadViewData('v_suspect_dossier')">5. v_suspect_dossier</button>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h3 id="currentViewTitle">View Data</h3>
-            <span class="badge" id="viewRowCount">0 rows</span>
-          </div>
-          <div class="table-container">
-            <table class="data-table" id="viewDynamicTable">
-              <thead id="viewDynamicHead"></thead>
-              <tbody id="viewDynamicBody"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================= -->
-      <!-- TAB 8: RAW API CONSOLE -->
-      <!-- ================================================================= -->
-      <section id="tab-console" class="tab-pane">
-        <div class="view-header">
-          <div>
-            <h2>Raw API & HTTP Console</h2>
-            <p class="subtitle">Test endpoints, inspect raw JSON responses, and measure query latency</p>
-          </div>
-        </div>
-
-        <div class="console-layout">
-          <div class="panel">
-            <div class="panel-header"><h3>HTTP Request</h3></div>
-            <div class="form-group">
-              <div class="input-row">
-                <select id="consoleMethod" class="select-method">
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                  <option value="PUT">PUT</option>
-                  <option value="DELETE">DELETE</option>
-                </select>
-                <input type="text" id="consoleEndpoint" class="input-endpoint" value="/cases">
-                <button class="btn btn-primary" onclick="sendConsoleRequest()">Send Request</button>
+        <!-- Mode 3: Sankey Flow & Crime Breakdown -->
+        <section class="workspace-pane" id="pane-analytics">
+          <div class="analytics-grid">
+            <div class="analytics-card">
+              <h3>
+                <span>⚡ Investigation Intake & Case Resolution Flow (Sankey Flow)</span>
+                <span class="badge badge-emerald">Real-Time</span>
+              </h3>
+              <div class="sankey-stage-container" id="sankeyFlowContainer">
+                <div class="sankey-col">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px;">1. CRIME INTAKE (FIR)</div>
+                  <div class="sankey-node high"><strong>Armed Robbery</strong> <span>40%</span></div>
+                  <div class="sankey-node high"><strong>Cyber Extortion</strong> <span>28%</span></div>
+                  <div class="sankey-node medium"><strong>Hate Crime</strong> <span>18%</span></div>
+                  <div class="sankey-node low"><strong>Petty Theft</strong> <span>14%</span></div>
+                </div>
+                <div class="sankey-col">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px;">2. ACTIVE INVESTIGATION</div>
+                  <div class="sankey-node high"><strong>High Impact Task Force</strong> <span>38%</span></div>
+                  <div class="sankey-node medium"><strong>Field Detective Patrol</strong> <span>34%</span></div>
+                  <div class="sankey-node low"><strong>Forensic Audit Vault</strong> <span>28%</span></div>
+                </div>
+                <div class="sankey-col">
+                  <div style="font-size:11px; font-weight:700; color:var(--text-muted); margin-bottom:4px;">3. RESOLUTION DISPOSITION</div>
+                  <div class="sankey-node low"><strong>Charge Sheet Filed</strong> <span>47%</span></div>
+                  <div class="sankey-node medium"><strong>Pending Trial</strong> <span>33%</span></div>
+                  <div class="sankey-node high"><strong>Cold Case Archive</strong> <span>20%</span></div>
+                </div>
               </div>
             </div>
 
-            <div class="form-group">
-              <label>JSON Request Body (For POST / PUT):</label>
-              <textarea id="consoleRequestBody" class="code-editor" rows="6" placeholder='{"status": "Under Investigation", "remarks": "Updated"}'></textarea>
+            <div class="analytics-card">
+              <h3>
+                <span>🎯 Case Clearance Rate</span>
+                <span class="badge badge-emerald" id="kpiClearanceBadge">83%</span>
+              </h3>
+              <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:160px;">
+                <div style="font-size:36px; font-weight:800; color:var(--emerald-neon);" id="kpiClearanceText">83.4%</div>
+                <div style="color:var(--text-muted); font-size:11.5px; margin-top:4px;">Cases cleared / closed within SLA</div>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:11px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+                <span>Total Registered: <strong id="kpiTotalRegisteredCases">5</strong></span>
+                <span>Active Vault Items: <strong id="kpiVaultItemsCount">8</strong></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Mode 4: Database Management Tables & Operations -->
+        <section class="workspace-pane" id="pane-tables">
+          <div class="subtab-header">
+            <div class="subtab-nav">
+              <button class="subtab-btn active" onclick="switchTableSubtab('tbl-cases')">Cases</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-org')">Branches & Officers</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-intake')">GD & FIR Intake</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-participants')">Suspects & People</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-evidence')">Evidence Custody</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-views')">SQL Views</button>
+              <button class="subtab-btn" onclick="switchTableSubtab('tbl-console')">Raw API Console</button>
+            </div>
+            <div id="tableActionsContainer">
+              <button class="btn btn-primary" onclick="openActiveTableModal()">+ New Record</button>
             </div>
           </div>
 
-          <div class="panel">
-            <div class="panel-header">
-              <h3>HTTP Response</h3>
-              <div class="response-meta">
-                <span class="badge" id="consoleStatus">-</span>
-                <span class="badge" id="consoleTime">-</span>
-              </div>
+          <!-- Table Subpane: Cases -->
+          <div class="table-subcontent active" id="tbl-cases">
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr><th>Case ID</th><th>Title</th><th>Status</th><th>Lead Officer</th><th>FIR Ref</th><th>Action</th></tr>
+                </thead>
+                <tbody id="tblCasesBody"><tr><td colspan="6" class="text-center">Loading cases...</td></tr></tbody>
+              </table>
             </div>
-            <pre id="consoleResponseBody" class="json-viewer">// Response JSON will be rendered here...</pre>
           </div>
+
+          <!-- Table Subpane: Organization -->
+          <div class="table-subcontent hidden" id="tbl-org">
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr><th>Badge No</th><th>Officer Name</th><th>Rank</th><th>Branch</th></tr>
+                </thead>
+                <tbody id="tblOfficersBody"><tr><td colspan="4" class="text-center">Loading officers...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table Subpane: Intake -->
+          <div class="table-subcontent hidden" id="tbl-intake">
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr><th>FIR Number</th><th>Crime Category</th><th>Filed Date</th><th>Penal Sections</th></tr>
+                </thead>
+                <tbody id="tblFIRsBody"><tr><td colspan="4" class="text-center">Loading FIRs...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table Subpane: Participants -->
+          <div class="table-subcontent hidden" id="tbl-participants">
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr><th>Suspect ID</th><th>Full Name</th><th>Suspicion Level</th><th>Status</th><th>Action</th></tr>
+                </thead>
+                <tbody id="tblSuspectsBody"><tr><td colspan="5" class="text-center">Loading suspects...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table Subpane: Evidence -->
+          <div class="table-subcontent hidden" id="tbl-evidence">
+            <div class="table-card">
+              <table>
+                <thead>
+                  <tr><th>Case</th><th>Item No</th><th>Title</th><th>Type</th><th>Custody Status</th><th>Audit</th></tr>
+                </thead>
+                <tbody id="tblEvidenceBody"><tr><td colspan="6" class="text-center">Loading evidence...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table Subpane: SQL Views -->
+          <div class="table-subcontent hidden" id="tbl-views">
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <button class="btn-sm" onclick="loadViewData('v_case_overview')">v_case_overview</button>
+              <button class="btn-sm" onclick="loadViewData('v_officer_caseload')">v_officer_caseload</button>
+              <button class="btn-sm" onclick="loadViewData('v_fir_case_pipeline')">v_fir_case_pipeline</button>
+              <button class="btn-sm" onclick="loadViewData('v_evidence_chain_of_custody')">v_evidence_chain_of_custody</button>
+              <button class="btn-sm" onclick="loadViewData('v_suspect_dossier')">v_suspect_dossier</button>
+            </div>
+            <div class="table-card">
+              <table id="dynamicViewTable">
+                <thead id="dynamicViewHead"></thead>
+                <tbody id="dynamicViewBody"><tr><td class="text-center">Select an analytical view above.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Table Subpane: Raw Console -->
+          <div class="table-subcontent hidden" id="tbl-console">
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <select id="consoleMethod" class="form-select" style="width:100px;">
+                <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+              </select>
+              <input type="text" id="consoleEndpoint" class="form-input" value="/cases">
+              <button class="btn btn-primary" onclick="sendConsoleRequest()">Execute</button>
+            </div>
+            <pre id="consoleResponseBody" style="background:var(--bg-input); border:1px solid var(--border-strong); padding:12px; border-radius:8px; font-family:var(--font-mono); font-size:11.5px; height:200px; overflow-y:auto; color:var(--emerald-neon);"></pre>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- ========================================================================
+         BOTTOM CHRONOLOGICAL TIMELINE SCRUBBER
+         ======================================================================== -->
+    <footer class="timeline-scrubber-bar">
+      <!-- Playback Controls -->
+      <div class="playback-controls">
+        <button class="playback-btn" onclick="stepTimeline(-1)" title="Previous Step">◀◀</button>
+        <button class="playback-btn" id="btnTimelinePlay" onclick="toggleTimelinePlay()" title="Play / Pause Timeline">▶</button>
+        <button class="playback-btn" onclick="stepTimeline(1)" title="Next Step">▶▶</button>
+        <button class="playback-btn" onclick="zoomTimeline(1)" title="Zoom In">+</button>
+        <button class="playback-btn" onclick="zoomTimeline(-1)" title="Zoom Out">−</button>
+      </div>
+
+      <!-- Histogram Scrubber -->
+      <div class="histogram-slider-container">
+        <div class="histogram-bars-wrapper" id="histogramBars">
+          <!-- Dynamic month histogram bars populated by app.js -->
         </div>
-      </section>
-    </main>
+        <div class="timeline-ticks">
+          <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
+        </div>
+      </div>
+
+      <!-- Year Selector -->
+      <select class="year-badge-select" id="timelineYearSelect" onchange="updateTimelineYear(this.value)">
+        <option value="2026" selected>2026 ▼</option>
+        <option value="2025">2025</option>
+        <option value="2024">2024</option>
+      </select>
+    </footer>
+
   </div>
 
-  <!-- Modals Container -->
-  <div id="modalBackdrop" class="modal-backdrop hidden" onclick="closeAllModals()"></div>
+  <!-- ========================================================================
+       MODALS & FORM POPUPS
+       ======================================================================== -->
+  <div class="modal-backdrop hidden" id="modalBackdrop" onclick="closeAllModals()"></div>
 
-  <!-- Modal: Case Status Transition -->
-  <div id="caseStatusModal" class="modal hidden">
+  <!-- Case Status Transition Modal -->
+  <div class="modal hidden" id="caseStatusModal">
     <div class="modal-header">
-      <h3>Update Case Status (Atomic Transaction)</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
+      <h3>Update Case Lifecycle Status</h3>
+      <button class="btn-sm" onclick="closeAllModals()">✕</button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="modalCaseID">
       <div class="form-group">
-        <label>Select New Status:</label>
-        <select id="modalCaseStatusSelect">
+        <label>Target Status:</label>
+        <select class="form-select" id="modalCaseStatusSelect">
           <option value="Open">Open</option>
-          <option value="Under Investigation">Under Investigation</option>
+          <option value="Under Investigation" selected>Under Investigation</option>
           <option value="Pending Review">Pending Review</option>
           <option value="Closed">Closed</option>
           <option value="Reopened">Reopened</option>
-          <option value="Archived">Archived</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Audit Remarks / Transition Reason:</label>
-        <textarea id="modalCaseRemarks" rows="3" placeholder="Explain reason for status change..."></textarea>
+        <label>Transition Remarks / Investigative Notes:</label>
+        <textarea class="form-textarea" id="modalCaseRemarks" rows="3" placeholder="Explain rationale for this lifecycle transition..."></textarea>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCaseStatusTransition()">Commit Status Update</button>
+      <button class="btn btn-primary" onclick="submitCaseStatusTransition()">Commit Transition</button>
     </div>
   </div>
 
-  <!-- Modal: Evidence Status Transition -->
-  <div id="evidenceStatusModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>Update Evidence Custody Status</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="modalEvidenceID">
-      <div class="form-group">
-        <label>New Custody Status:</label>
-        <select id="modalEvidenceStatusSelect">
-          <option value="Collected">Collected</option>
-          <option value="In Lab Analysis">In Lab Analysis</option>
-          <option value="Stored in Vault">Stored in Vault</option>
-          <option value="Presented in Court">Presented in Court</option>
-          <option value="Archived">Archived</option>
-          <option value="Disposed">Disposed</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Updated Storage Location:</label>
-        <input type="text" id="modalEvidenceLocation" placeholder="e.g. Vault Locker 4B, Forensics Lab 2">
-      </div>
-      <div class="form-group">
-        <label>Chain of Custody Remarks:</label>
-        <textarea id="modalEvidenceRemarks" rows="3" placeholder="Custody transfer remarks..."></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitEvidenceStatusTransition()">Log Chain Transition</button>
-    </div>
-  </div>
-
-  <!-- Modal: Add Branch -->
-  <div id="createBranchModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>Add Agency Branch</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Branch Name:</label>
-        <input type="text" id="newBranchName" placeholder="e.g. Uttara Zone Precinct">
-      </div>
-      <div class="form-group">
-        <label>District:</label>
-        <input type="text" id="newBranchDistrict" placeholder="e.g. Dhaka">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateBranch()">Save Branch</button>
-    </div>
-  </div>
-
-  <!-- Modal: Register Officer -->
-  <div id="createOfficerModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>Register Sworn Officer</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Badge Number:</label>
-        <input type="text" id="newOfficerBadge" placeholder="e.g. BD-8821">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>First Name:</label>
-          <input type="text" id="newOfficerFirstName" placeholder="First Name">
-        </div>
-        <div class="form-group">
-          <label>Last Name:</label>
-          <input type="text" id="newOfficerLastName" placeholder="Last Name">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Rank:</label>
-          <input type="text" id="newOfficerRank" placeholder="e.g. Inspector, Detective">
-        </div>
-        <div class="form-group">
-          <label>Branch:</label>
-          <select id="newOfficerBranchSelect"></select>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateOfficer()">Register Officer</button>
-    </div>
-  </div>
-
-  <!-- Modal: Register Complainant -->
-  <div id="createComplainantModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>Register Complainant (with Normalized Contacts)</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Full Name:</label>
-        <input type="text" id="newCompName" placeholder="Full name...">
-      </div>
-      <div class="form-group">
-        <label>Primary Phone Number:</label>
-        <input type="text" id="newCompPhone" placeholder="e.g. 01711223344">
-      </div>
-      <div class="form-group">
-        <label>Email Address (Optional):</label>
-        <input type="email" id="newCompEmail" placeholder="name@example.com">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateComplainant()">Save Complainant</button>
-    </div>
-  </div>
-
-  <!-- Modal: File GD -->
-  <div id="createGDModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>File General Diary (GD)</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>GD Number:</label>
-          <input type="text" id="newGDNumber" placeholder="e.g. GD-2026-901">
-        </div>
-        <div class="form-group">
-          <label>Date (YYYY-MM-DD):</label>
-          <input type="date" id="newGDDate">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Complainant:</label>
-        <select id="newGDComplainantSelect"></select>
-      </div>
-      <div class="form-group">
-        <label>Subject / Incident Details:</label>
-        <textarea id="newGDSubject" rows="3" placeholder="Describe the reported incident..."></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateGD()">Record GD Entry</button>
-    </div>
-  </div>
-
-  <!-- Modal: File FIR -->
-  <div id="createFIRModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>File First Information Report (FIR)</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>FIR Number:</label>
-          <input type="text" id="newFIRNumber" placeholder="e.g. FIR-2026-801">
-        </div>
-        <div class="form-group">
-          <label>Filed Date:</label>
-          <input type="date" id="newFIRDate">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Crime Category:</label>
-          <input type="text" id="newFIRCategory" placeholder="e.g. Armed Robbery, Cyber Extortion">
-        </div>
-        <div class="form-group">
-          <label>Source GD (Optional):</label>
-          <select id="newFIRGDSelect">
-            <option value="">-- No Linked GD --</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Applicable Statutory Legal Sections:</label>
-        <div id="newFIRSectionsCheckboxContainer" class="checkbox-container"></div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateFIR()">File FIR</button>
-    </div>
-  </div>
-
-  <!-- Modal: Open Case -->
-  <div id="openCaseModal" class="modal hidden">
+  <!-- New Case Modal -->
+  <div class="modal hidden" id="newCaseModal">
     <div class="modal-header">
       <h3>Open New Investigation Case</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
+      <button class="btn-sm" onclick="closeAllModals()">✕</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
         <label>Case Title:</label>
-        <input type="text" id="newCaseTitle" placeholder="e.g. Operation Nightfall: Cyber Syndicate">
+        <input type="text" class="form-input" id="newCaseTitle" placeholder="e.g. Heist at Dhanmondi Vault">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Opened Date:</label>
-          <input type="date" id="newCaseOpenedDate">
-        </div>
-        <div class="form-group">
-          <label>Source FIR (Optional):</label>
-          <select id="newCaseFIRSelect">
-            <option value="">-- No Linked FIR --</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>Linked First Information Report (FIR):</label>
+        <select class="form-select" id="newCaseFIRSelect"><option value="">-- No Linked FIR --</option></select>
       </div>
       <div class="form-group">
         <label>Lead Investigating Officer:</label>
-        <select id="newCaseOfficerSelect"></select>
+        <select class="form-select" id="newCaseOfficerSelect"></select>
+      </div>
+      <div class="form-group">
+        <label>Opened Date:</label>
+        <input type="date" class="form-input" id="newCaseOpenedDate">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitOpenCase()">Open Case</button>
+      <button class="btn btn-primary" onclick="submitOpenCase()">Create Case</button>
     </div>
   </div>
 
-  <!-- Modal: Register Suspect -->
-  <div id="createSuspectModal" class="modal hidden">
+  <!-- Quick Help Modal -->
+  <div class="modal hidden" id="quickHelpModal">
     <div class="modal-header">
-      <h3>Register Suspect</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
+      <h3>ORCUS System Navigation & Architecture</h3>
+      <button class="btn-sm" onclick="closeAllModals()">✕</button>
     </div>
-    <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>First Name:</label>
-          <input type="text" id="newSuspectFirstName">
-        </div>
-        <div class="form-group">
-          <label>Last Name:</label>
-          <input type="text" id="newSuspectLastName">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Age:</label>
-          <input type="number" id="newSuspectAge" min="1" max="120">
-        </div>
-        <div class="form-group">
-          <label>Suspicion Level:</label>
-          <select id="newSuspectLevel">
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High" selected>High</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Distinct Identification Sign / Mark:</label>
-        <input type="text" id="newSuspectSign" placeholder="e.g. Dragon tattoo on neck">
-      </div>
+    <div class="modal-body" style="font-size:12px; color:var(--text-secondary);">
+      <p><strong>ORCUS</strong> is a high-performance DBMS and Tactical Intelligence Suite built for police investigations and evidence chain-of-custody tracking.</p>
+      <ul style="padding-left:16px; margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+        <li>🗺️ <strong>Mode 1 (Map)</strong>: Interactive Leaflet GIS Crime Mapping with CartoDB tiles.</li>
+        <li>🕸️ <strong>Mode 2 (Graph)</strong>: Palantir-style Link Analysis Entity Network Graph.</li>
+        <li>📊 <strong>Mode 3 (Pipeline)</strong>: Sankey Crime Resolution flow.</li>
+        <li>📁 <strong>Mode 4 (Tables)</strong>: Database CRUD across all 3 modules.</li>
+        <li>☀️/🌙 <strong>Theme Swap</strong>: Instant toggle between Dark Obsidian and Crisp Slate.</li>
+      </ul>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateSuspect()">Save Suspect</button>
+      <button class="btn btn-primary" onclick="closeAllModals()">Close</button>
     </div>
   </div>
 
-  <!-- Modal: Register Evidence -->
-  <div id="createEvidenceModal" class="modal hidden">
-    <div class="modal-header">
-      <h3>Register Evidence Item (Weak Entity)</h3>
-      <button class="modal-close" onclick="closeAllModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Target Case:</label>
-        <select id="newEvidenceCaseSelect"></select>
-      </div>
-      <div class="form-group">
-        <label>Evidence Title:</label>
-        <input type="text" id="newEvidenceTitle" placeholder="e.g. Encrypted Laptop, 9mm Bullet Shell">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Evidence Type:</label>
-          <select id="newEvidenceType">
-            <option value="Physical">Physical</option>
-            <option value="Digital">Digital</option>
-            <option value="Documentary">Documentary</option>
-            <option value="Biological">Biological</option>
-            <option value="Forensic">Forensic</option>
-            <option value="Weapon">Weapon</option>
-            <option value="Narcotics">Narcotics</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Storage Vault / Location:</label>
-          <input type="text" id="newEvidenceStorage" placeholder="e.g. Vault Locker 2B">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Item Description:</label>
-        <textarea id="newEvidenceDesc" rows="2" placeholder="Describe physical condition, serial number, etc."></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeAllModals()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitCreateEvidence()">Register Item</button>
-    </div>
-  </div>
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
 
-  <!-- Scripts -->
+  <!-- Application Logic -->
   <script src="app.js"></script>
 </body>
 </html>
