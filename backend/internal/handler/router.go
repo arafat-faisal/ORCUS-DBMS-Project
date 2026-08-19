@@ -15,6 +15,9 @@
 package handler
 
 import (
+	"os"
+	"path/filepath"
+
 	"orcus-backend/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -36,9 +39,19 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), middleware.LoggerMiddleware(), middleware.CORSMiddleware())
 
-	// Serve static testing frontend dashboard
-	r.Static("/ui", "./test-frontend")
-	r.StaticFile("/", "./test-frontend/index.html")
+	// Locate and serve static testing frontend dashboard safely
+	staticDir := "./test-frontend"
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		if _, err := os.Stat("../test-frontend"); err == nil {
+			staticDir = "../test-frontend"
+		}
+	}
+
+	indexFile := filepath.Join(staticDir, "index.html")
+	if _, err := os.Stat(indexFile); err == nil {
+		r.Static("/ui", staticDir)
+		r.StaticFile("/", indexFile)
+	}
 
 	api := r.Group("/api/v1")
 	{
