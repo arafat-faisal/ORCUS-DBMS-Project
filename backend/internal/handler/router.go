@@ -53,6 +53,7 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 		r.StaticFile("/index.html", indexFile)
 		r.StaticFile("/styles.css", filepath.Join(staticDir, "styles.css"))
 		r.StaticFile("/app.js", filepath.Join(staticDir, "app.js"))
+		r.Static("/assets", filepath.Join(staticDir, "assets"))
 		r.Static("/ui", staticDir)
 		r.Static("/static", staticDir)
 	}

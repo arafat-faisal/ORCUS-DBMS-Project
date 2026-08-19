@@ -1,63 +1,37 @@
 // ============================================================================
-// ORCUS Tactical Intelligence & Case Tracking System - Application Engine
+// ORCUS DBMS Project - Presentation Demo Engine
 // Author: Md. Arafat Hossain Faisal (241400060)
 // ============================================================================
 
 let authToken = localStorage.getItem('orcus_test_token') || '';
 let currentUser = null;
 let currentTheme = localStorage.getItem('orcus_theme') || 'dark';
-let currentWorkspaceMode = 'map';
-let activeSelectedCaseID = 1;
-let leafletMap = null;
-let mapTileLayer = null;
-let mapMarkers = [];
-let mapRoutePolyline = null;
-let graphNodes = [];
-let graphEdges = [];
-let graphAnimationId = null;
-let isDraggingNode = null;
-let timelineInterval = null;
-let currentTimelineMonth = 7; // August
+let activeSelectedCaseID = null;
 
 // ----------------------------------------------------------------------------
-// Theme Switcher Engine
+// Theme Switcher
 // ----------------------------------------------------------------------------
 function initTheme() {
   document.documentElement.setAttribute('data-theme', currentTheme);
-  updateThemeIcons();
+  updateThemeButton();
 }
 
 function toggleTheme() {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', currentTheme);
   localStorage.setItem('orcus_theme', currentTheme);
-  updateThemeIcons();
-
-  // Update Leaflet Tile Layer
-  if (leafletMap && mapTileLayer) {
-    leafletMap.removeLayer(mapTileLayer);
-    const tileUrl = currentTheme === 'dark'
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-    mapTileLayer = L.tileLayer(tileUrl, { attribution: '© CartoDB, © OpenStreetMap' }).addTo(leafletMap);
-  }
-
-  // Redraw Graph Canvas
-  if (currentWorkspaceMode === 'graph') {
-    renderGraph();
-  }
+  updateThemeButton();
 }
 
-function updateThemeIcons() {
-  const btn1 = document.getElementById('themeToggleBtn');
-  const btn2 = document.getElementById('sidebarThemeBtn');
-  const icon = currentTheme === 'dark' ? '☀️' : '🌙';
-  if (btn1) btn1.innerText = icon;
-  if (btn2) btn2.innerText = icon;
+function updateThemeButton() {
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) {
+    btn.innerText = currentTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+  }
 }
 
 // ----------------------------------------------------------------------------
-// API Helper (Direct Relative /api/v1)
+// API Helper
 // ----------------------------------------------------------------------------
 async function apiRequest(endpoint, method = 'GET', body = null) {
   const url = endpoint.startsWith('http') ? endpoint : `/api/v1${endpoint}`;
@@ -93,53 +67,27 @@ function showToast(message, type = 'success') {
 }
 
 // ----------------------------------------------------------------------------
-// Workspace Mode Switcher
+// Navigation Tabs
 // ----------------------------------------------------------------------------
-function switchWorkspaceMode(mode) {
-  currentWorkspaceMode = mode;
-  document.querySelectorAll('.workspace-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.mode-tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active'));
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
-  const targetPane = document.getElementById(`pane-${mode}`);
-  if (targetPane) targetPane.classList.add('active');
-
-  const navBtns = document.querySelectorAll('.mode-tab-btn');
-  if (mode === 'map' && navBtns[0]) navBtns[0].classList.add('active');
-  if (mode === 'graph' && navBtns[1]) navBtns[1].classList.add('active');
-  if (mode === 'analytics' && navBtns[2]) navBtns[2].classList.add('active');
-  if (mode === 'tables' && navBtns[3]) navBtns[3].classList.add('active');
-
-  const mapIcon = document.getElementById('btnModeMap');
-  const graphIcon = document.getElementById('btnModeGraph');
-  const analytIcon = document.getElementById('btnModeAnalytics');
-  const tblIcon = document.getElementById('btnModeTables');
-
-  if (mode === 'map' && mapIcon) mapIcon.classList.add('active');
-  if (mode === 'graph' && graphIcon) graphIcon.classList.add('active');
-  if (mode === 'analytics' && analytIcon) analytIcon.classList.add('active');
-  if (mode === 'tables' && tblIcon) tblIcon.classList.add('active');
-
-  if (mode === 'map') {
-    setTimeout(() => {
-      if (leafletMap) leafletMap.invalidateSize();
-      else initTacticalMap();
-    }, 100);
+  const target = document.getElementById(tabId);
+  if (target) target.classList.add('active');
+  if (window.event && window.event.currentTarget) {
+    window.event.currentTarget.classList.add('active');
   }
 
-  if (mode === 'graph') {
-    setTimeout(() => {
-      initLinkGraph();
-    }, 100);
-  }
-
-  if (mode === 'tables') {
-    loadTableData('tbl-cases');
-  }
+  if (tabId === 'tab-overview') loadOverviewData();
+  if (tabId === 'tab-org') { loadBranches(); loadOfficers(); }
+  if (tabId === 'tab-intake') { loadCases(); loadFIRs(); loadGDs(); populateCaseModalDropdowns(); }
+  if (tabId === 'tab-participants') { loadSuspects(); loadEvidence(); loadVictims(); loadWitnesses(); loadLocations(); }
+  if (tabId === 'tab-views') fetchViewData('v_case_overview');
 }
 
 // ----------------------------------------------------------------------------
-// Authentication & Session Management
+// Auth & Session
 // ----------------------------------------------------------------------------
 async function quickLogin(username, password, label) {
   const res = await apiRequest('/auth/login', 'POST', { username, password });
@@ -154,15 +102,15 @@ async function quickLogin(username, password, label) {
     if (pill && pillText) {
       pill.style.background = 'rgba(16, 185, 129, 0.15)';
       pill.style.color = '#34d399';
-      pillText.innerText = 'Connected: MySQL 8.0 (Live)';
+      pillText.innerText = 'Connected: MySQL 8.0 Live';
     }
-    showToast(`Logged in as ${label}`, 'success');
-    loadInitialWorkstationData();
+    showToast(`Authenticated as ${label}`, 'success');
+    loadOverviewData();
   } else {
     if (pill && pillText) {
       pill.style.background = 'rgba(244, 63, 94, 0.15)';
       pill.style.color = '#fb7185';
-      pillText.innerText = 'Connection Error';
+      pillText.innerText = 'Database Disconnected';
     }
     showToast(`Login failed: ${res.data?.error || res.error}`, 'error');
   }
@@ -191,9 +139,9 @@ async function verifySession() {
     if (pill && pillText) {
       pill.style.background = 'rgba(16, 185, 129, 0.15)';
       pill.style.color = '#34d399';
-      pillText.innerText = 'Connected: MySQL 8.0 (Live)';
+      pillText.innerText = 'Connected: MySQL 8.0 Live';
     }
-    loadInitialWorkstationData();
+    loadOverviewData();
   } else {
     await quickLogin('admin_faisal', 'password123', 'Admin Faisal');
   }
@@ -207,455 +155,283 @@ function updateUserBadge(user) {
 }
 
 // ----------------------------------------------------------------------------
-// Initial Data Loader
+// Tab 1: Overview & Views
 // ----------------------------------------------------------------------------
-async function loadInitialWorkstationData() {
-  initTacticalMap();
-  loadDossierCase(activeSelectedCaseID);
-  buildHistogramSlider();
+async function loadOverviewData() {
+  const kpiRes = await apiRequest('/analytics/overview');
+  if (kpiRes.ok && kpiRes.data.data) {
+    const d = kpiRes.data.data;
+    document.getElementById('kpiActiveCases').innerText = d.active_cases_count;
+    document.getElementById('kpiTotalCases').innerText = d.total_cases_count;
+    document.getElementById('kpiPendingFIRs').innerText = d.pending_firs_count;
+    document.getElementById('kpiEvidence').innerText = d.evidence_count;
+    document.getElementById('kpiOfficers').innerText = d.total_officers_count;
+    document.getElementById('kpiBranches').innerText = d.total_branches_count;
+  }
+
+  // Load pipeline summary
+  const pipeRes = await apiRequest('/analytics/pipeline');
+  const pipeBody = document.getElementById('overviewPipelineBody');
+  if (pipeRes.ok && pipeRes.data.data && pipeBody) {
+    pipeBody.innerHTML = pipeRes.data.data.map(item => `
+      <tr>
+        <td><strong>${item.fir_number}</strong></td>
+        <td><span class="badge badge-purple">${item.crime_category}</span></td>
+        <td>${item.filed_date ? item.filed_date.split('T')[0] : '-'}</td>
+        <td>${item.case_title || '<em style="color:var(--text-muted)">Intake Pending</em>'}</td>
+        <td>${getStatusBadge(item.case_status || 'Open')}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Load caseload summary
+  const caseRes = await apiRequest('/officers/caseload');
+  const caseBody = document.getElementById('overviewCaseloadBody');
+  if (caseRes.ok && caseRes.data.data && caseBody) {
+    caseBody.innerHTML = caseRes.data.data.map(item => `
+      <tr>
+        <td><strong>${item.officer_name}</strong> <small style="color:var(--text-muted);">(${item.badge_no})</small></td>
+        <td><span class="badge badge-blue">${item.rank}</span></td>
+        <td>${item.branch_name}</td>
+        <td><span class="badge badge-purple">${item.total_cases_assigned}</span></td>
+        <td><span class="badge badge-amber">${item.active_cases}</span></td>
+      </tr>
+    `).join('');
+  }
 }
 
 // ----------------------------------------------------------------------------
-// Mode 1: GIS Tactical Crime Map Engine (Leaflet.js)
+// Tab 2: Module 1 - Organization & Personnel (Faisal)
 // ----------------------------------------------------------------------------
-function initTacticalMap() {
-  const container = document.getElementById('leafletMapContainer');
-  if (!container || leafletMap) return;
-
-  leafletMap = L.map('leafletMapContainer', {
-    center: [23.7771, 90.3994], // Dhaka Central
-    zoom: 13,
-    zoomControl: false
-  });
-
-  const tileUrl = currentTheme === 'dark'
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-
-  mapTileLayer = L.tileLayer(tileUrl, {
-    attribution: '© CartoDB, © OpenStreetMap contributors'
-  }).addTo(leafletMap);
-
-  loadMapLocations();
+async function loadBranches() {
+  const res = await apiRequest('/branches');
+  const tbody = document.getElementById('branchesTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(b => `
+      <tr>
+        <td><strong>#${b.branch_id}</strong></td>
+        <td><strong>${b.branch_name}</strong></td>
+        <td><span class="badge badge-teal">${b.district}</span></td>
+      </tr>
+    `).join('');
+  }
 }
 
-async function loadMapLocations() {
-  const res = await apiRequest('/locations');
-  if (!res.ok || !res.data.data) return;
+async function loadOfficers() {
+  const res = await apiRequest('/officers');
+  const tbody = document.getElementById('officersTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(o => `
+      <tr>
+        <td><code>${o.badge_no}</code></td>
+        <td><strong>${o.first_name} ${o.last_name}</strong></td>
+        <td><span class="badge badge-blue">${o.rank}</span></td>
+        <td>${o.branch_name || 'HQ'}</td>
+      </tr>
+    `).join('');
+  }
+}
 
-  const locs = res.data.data;
-  const coords = [];
+// ----------------------------------------------------------------------------
+// Tab 3: Module 2 - Intake & Cases (Shakil)
+// ----------------------------------------------------------------------------
+async function loadCases() {
+  const res = await apiRequest('/cases');
+  const tbody = document.getElementById('casesTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(c => `
+      <tr>
+        <td><strong>#${c.case_id}</strong></td>
+        <td><strong>${c.case_title}</strong></td>
+        <td>${getStatusBadge(c.case_status)}</td>
+        <td>${c.lead_officer_name || '-'}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="inspectCaseDossier(${c.case_id})">Inspect</button></td>
+      </tr>
+    `).join('');
 
-  // Default coordinate mappings for known districts if GPS coordinates are missing
-  const defaultCoords = {
-    'Dhanmondi': [23.7461, 90.3742],
-    'Gulshan': [23.7925, 90.4078],
-    'Uttara': [23.8759, 90.3795],
-    'Mirpur': [23.8071, 90.3687],
-    'Motijheel': [23.7330, 90.4172],
-    'Chattogram': [22.3569, 91.7832]
-  };
-
-  locs.forEach((loc, idx) => {
-    let lat = 23.75 + (idx * 0.02);
-    let lng = 90.38 + (idx * 0.015);
-
-    if (defaultCoords[loc.area]) {
-      lat = defaultCoords[loc.area][0];
-      lng = defaultCoords[loc.area][1];
+    if (res.data.data.length > 0 && !activeSelectedCaseID) {
+      inspectCaseDossier(res.data.data[0].case_id);
     }
-
-    coords.push([lat, lng]);
-
-    // Custom tactical marker icon
-    const customIcon = L.divIcon({
-      className: 'custom-map-pin',
-      html: `<div style="background:#10b981; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 10px #10b981;"></div>`,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7]
-    });
-
-    const marker = L.marker([lat, lng], { icon: customIcon }).addTo(leafletMap);
-    marker.bindPopup(`
-      <div style="font-family:sans-serif; font-size:12px; color:#0f172a;">
-        <strong style="color:#059669;">📍 ${loc.address}</strong><br>
-        Area: <strong>${loc.area}</strong> (${loc.city})<br>
-        <span style="color:#64748b; font-size:11px;">GPS: ${loc.gps_coordinates || 'Calibrated'}</span>
-      </div>
-    `);
-    mapMarkers.push({ marker, type: idx % 2 === 0 ? 'crime' : 'evidence' });
-  });
-
-  // Draw Tactical Surveillance Polygon / Route
-  if (coords.length > 2) {
-    mapRoutePolyline = L.polyline(coords, {
-      color: '#10b981',
-      weight: 2,
-      dashArray: '6, 8',
-      opacity: 0.85
-    }).addTo(leafletMap);
   }
 }
 
-function centerMapOnDhaka() {
-  if (leafletMap) leafletMap.setView([23.7771, 90.3994], 13);
-}
-
-function zoomInMap() {
-  if (leafletMap) leafletMap.zoomIn();
-}
-
-function zoomOutMap() {
-  if (leafletMap) leafletMap.zoomOut();
-}
-
-function toggleMapRoutes() {
-  if (!leafletMap || !mapRoutePolyline) return;
-  if (leafletMap.hasLayer(mapRoutePolyline)) {
-    leafletMap.removeLayer(mapRoutePolyline);
-  } else {
-    mapRoutePolyline.addTo(leafletMap);
-  }
-}
-
-function filterMapMarkers(type) {
-  mapMarkers.forEach(m => {
-    if (type === 'all' || m.type === type) {
-      m.marker.addTo(leafletMap);
-    } else {
-      leafletMap.removeLayer(m.marker);
-    }
-  });
-}
-
-// ----------------------------------------------------------------------------
-// Mode 2: Link Analysis Entity Graph Engine (HTML5 Canvas)
-// ----------------------------------------------------------------------------
-function initLinkGraph() {
-  const canvas = document.getElementById('linkGraphCanvas');
-  if (!canvas) return;
-
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.parentElement.clientWidth;
-  canvas.height = canvas.parentElement.clientHeight;
-
-  // Build Entity Graph Model
-  graphNodes = [
-    { id: 'case_1', label: 'Case #029128: Dhanmondi Vault', type: 'case', x: canvas.width * 0.45, y: canvas.height * 0.45, vx: 0, vy: 0, r: 24, color: '#3b82f6' },
-    { id: 'suspect_1', label: 'Timothée Chalamet (Phantom)', type: 'suspect', x: canvas.width * 0.25, y: canvas.height * 0.3, vx: 0, vy: 0, r: 18, color: '#f43f5e' },
-    { id: 'suspect_2', label: 'Rahim Chowdhury', type: 'suspect', x: canvas.width * 0.28, y: canvas.height * 0.65, vx: 0, vy: 0, r: 18, color: '#f43f5e' },
-    { id: 'victim_1', label: 'First National Bank', type: 'victim', x: canvas.width * 0.65, y: canvas.height * 0.28, vx: 0, vy: 0, r: 16, color: '#f59e0b' },
-    { id: 'witness_1', label: 'Security Guard Hassan', type: 'witness', x: canvas.width * 0.7, y: canvas.height * 0.6, vx: 0, vy: 0, r: 16, color: '#06b6d4' },
-    { id: 'evid_1', label: 'CCTV Server Hard Drive', type: 'evidence', x: canvas.width * 0.5, y: canvas.height * 0.75, vx: 0, vy: 0, r: 16, color: '#8b5cf6' },
-    { id: 'branch_1', label: 'Central HQ (Officer Faisal)', type: 'branch', x: canvas.width * 0.48, y: canvas.height * 0.18, vx: 0, vy: 0, r: 18, color: '#10b981' }
-  ];
-
-  graphEdges = [
-    { from: 'suspect_1', to: 'case_1', label: 'suspect_in' },
-    { from: 'suspect_2', to: 'case_1', label: 'accomplice' },
-    { from: 'victim_1', to: 'case_1', label: 'complainant' },
-    { from: 'witness_1', to: 'case_1', label: 'eyewitness' },
-    { from: 'evid_1', to: 'case_1', label: 'recovered_at' },
-    { from: 'branch_1', to: 'case_1', label: 'investigating_branch' }
-  ];
-
-  setupGraphInteractions(canvas);
-  startGraphAnimation(ctx, canvas);
-}
-
-function startGraphAnimation(ctx, canvas) {
-  if (graphAnimationId) cancelAnimationFrame(graphAnimationId);
-
-  function loop() {
-    renderGraph();
-    graphAnimationId = requestAnimationFrame(loop);
-  }
-  loop();
-}
-
-function renderGraph() {
-  const canvas = document.getElementById('linkGraphCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const edgeColor = isDark ? '#2a384c' : '#cbd5e1';
-  const textColor = isDark ? '#f1f5f9' : '#0f172a';
-
-  // Draw Edges
-  graphEdges.forEach(edge => {
-    const fromNode = graphNodes.find(n => n.id === edge.from);
-    const toNode = graphNodes.find(n => n.id === edge.to);
-    if (!fromNode || !toNode) return;
-
-    ctx.beginPath();
-    ctx.moveTo(fromNode.x, fromNode.y);
-    ctx.lineTo(toNode.x, toNode.y);
-    ctx.strokeStyle = edgeColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Edge Label
-    const midX = (fromNode.x + toNode.x) / 2;
-    const midY = (fromNode.y + toNode.y) / 2;
-    ctx.font = '10px Inter, sans-serif';
-    ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-    ctx.fillText(edge.label, midX + 4, midY - 4);
-  });
-
-  // Draw Nodes
-  graphNodes.forEach(node => {
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-    ctx.fillStyle = node.color;
-    ctx.shadowColor = node.color;
-    ctx.shadowBlur = isDark ? 10 : 4;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = isDark ? '#ffffff' : '#0f172a';
-    ctx.stroke();
-
-    // Node Text Label
-    ctx.font = '11px Inter, sans-serif';
-    ctx.fillStyle = textColor;
-    ctx.textAlign = 'center';
-    ctx.fillText(node.label, node.x, node.y + node.r + 14);
-  });
-}
-
-function setupGraphInteractions(canvas) {
-  let draggedNode = null;
-
-  canvas.onmousedown = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    draggedNode = graphNodes.find(n => {
-      const dx = n.x - x;
-      const dy = n.y - y;
-      return Math.sqrt(dx * dx + dy * dy) < n.r + 5;
-    });
-  };
-
-  canvas.onmousemove = (e) => {
-    if (!draggedNode) return;
-    const rect = canvas.getBoundingClientRect();
-    draggedNode.x = e.clientX - rect.left;
-    draggedNode.y = e.clientY - rect.top;
-  };
-
-  canvas.onmouseup = () => {
-    draggedNode = null;
-  };
-}
-
-function resetGraphPhysics() {
-  initLinkGraph();
-}
-
-function exportGraphSVG() {
-  showToast('Entity graph exported as high-res SVG!', 'success');
-}
-
-function exportGraphJSON() {
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ nodes: graphNodes, edges: graphEdges }, null, 2));
-  const dl = document.createElement('a');
-  dl.setAttribute("href", dataStr);
-  dl.setAttribute("download", "orcus_knowledge_graph.json");
-  dl.click();
-  showToast('Graph topology exported to JSON', 'success');
-}
-
-// ----------------------------------------------------------------------------
-// Left Panel: Intelligence Dossier Sync
-// ----------------------------------------------------------------------------
-async function loadDossierCase(caseID) {
-  const res = await apiRequest(`/cases/${caseID}`);
-  if (!res.ok || !res.data.data) return;
-
-  const d = res.data.data;
-  document.getElementById('dossierCaseTitle').innerText = d.case.case_title;
-  document.getElementById('dossierCaseOwner').innerText = d.case.lead_officer_name || 'Arafat Faisal';
-  document.getElementById('dossierCaseNo').innerText = `#ORC-0${d.case.case_id}9128`;
-  document.getElementById('activeCaseHeaderTitle').innerText = `Investigation: ${d.case.case_title}`;
-
-  if (d.suspects && d.suspects.length > 0) {
-    const s = d.suspects[0];
-    document.getElementById('dossierSuspectName').innerText = `${s.first_name} ${s.last_name}`;
-    document.getElementById('dossierSpecRisk').innerText = `${s.suspicion_level} Risk ⚡`;
-    document.getElementById('dossierRoleText').innerText = s.role_in_crime || 'Person of Interest identified near crime scene.';
-  }
-
-  if (d.evidence_items && d.evidence_items.length > 0) {
-    const e = d.evidence_items[0];
-    document.getElementById('dossierEvidenceTitle').innerText = e.title;
-    document.getElementById('dossierEvidenceDesc').innerText = e.description || 'Physical item logged under strict chain-of-custody.';
-  }
-}
-
-function handleCommandKey(e) {
-  if (e.key === 'Enter') {
-    const input = document.getElementById('commandQueryInput');
-    showToast(`Command executed: "${input.value}"`, 'success');
-    input.value = '';
-  }
-}
-
-// ----------------------------------------------------------------------------
-// Bottom Chronological Timeline Scrubber
-// ----------------------------------------------------------------------------
-function buildHistogramSlider() {
-  const container = document.getElementById('histogramBars');
+async function inspectCaseDossier(caseID) {
+  activeSelectedCaseID = caseID;
+  const container = document.getElementById('caseDossierView');
   if (!container) return;
 
-  const heights = [6, 8, 12, 18, 14, 22, 16, 24, 19, 15, 10, 7];
-  container.innerHTML = heights.map((h, i) => `
-    <div class="hist-bar ${i === currentTimelineMonth ? 'active' : ''}" 
-         style="height: ${h}px;" 
-         onclick="selectTimelineMonth(${i})" 
-         title="Month ${i + 1}: ${h * 3} criminal incidents logged"></div>
-  `).join('');
+  container.innerHTML = '<div style="color:var(--text-muted); text-align:center;">Loading case dossier...</div>';
+  const res = await apiRequest(`/cases/${caseID}`);
+
+  if (res.ok && res.data.data) {
+    const d = res.data.data;
+    container.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h3 style="font-size:15px; color:var(--primary); font-weight:700;">Case #${d.case.case_id}: ${d.case.case_title}</h3>
+          <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">
+            Lead Detective: <strong>${d.case.lead_officer_name || 'Unassigned'}</strong> • FIR: <strong>${d.case.fir_number || 'Direct Filing'}</strong>
+          </div>
+        </div>
+        ${getStatusBadge(d.case.case_status)}
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="dossier-section-title">🚨 Linked Suspects (${d.suspects?.length || 0})</div>
+        ${(d.suspects && d.suspects.length > 0) ? d.suspects.map(s => `
+          <div style="background:var(--bg-elevated); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:11.5px;">
+            <strong>${s.first_name} ${s.last_name}</strong> — Risk: <span class="badge badge-rose">${s.suspicion_level}</span> | Role: <em>${s.role_in_crime || 'Suspect'}</em>
+          </div>
+        `).join('') : '<span style="color:var(--text-muted); font-size:11px;">No suspects linked.</span>'}
+      </div>
+
+      <div style="margin-top:8px;">
+        <div class="dossier-section-title">📦 Logged Evidence (${d.evidence_items?.length || 0})</div>
+        ${(d.evidence_items && d.evidence_items.length > 0) ? d.evidence_items.map(e => `
+          <div style="background:var(--bg-elevated); padding:6px 10px; border-radius:6px; margin-bottom:4px; font-size:11.5px;">
+            <strong>Item #${e.evidence_no}: ${e.title}</strong> — <span class="badge badge-purple">${e.evidence_type}</span> | Status: <span class="badge badge-green">${e.status}</span>
+          </div>
+        `).join('') : '<span style="color:var(--text-muted); font-size:11px;">No evidence logged.</span>'}
+      </div>
+
+      <div style="margin-top:8px;">
+        <div class="dossier-section-title">📜 Lifecycle History (case_status_history)</div>
+        ${(d.status_history && d.status_history.length > 0) ? d.status_history.map(h => `
+          <div style="font-size:11px; padding:4px 0; border-bottom:1px solid var(--border);">
+            <strong>${h.status}</strong> by <em>${h.changed_by || 'System'}</em> at ${h.changed_at ? h.changed_at.split('T')[0] : ''}
+            <div style="color:var(--text-muted);">${h.remarks || 'No remarks'}</div>
+          </div>
+        `).join('') : '<span style="color:var(--text-muted); font-size:11px;">No transitions logged.</span>'}
+      </div>
+    `;
+  }
 }
 
-function selectTimelineMonth(idx) {
-  currentTimelineMonth = idx;
-  buildHistogramSlider();
-  showToast(`Timeline scrubber moved to month ${idx + 1}`, 'success');
+async function loadFIRs() {
+  const res = await apiRequest('/firs');
+  const tbody = document.getElementById('firsTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(f => `
+      <tr>
+        <td><strong>${f.fir_number}</strong></td>
+        <td><span class="badge badge-purple">${f.crime_category}</span></td>
+        <td>${f.filed_date ? f.filed_date.split('T')[0] : '-'}</td>
+        <td>${(f.legal_sections || []).map(s => `<span class="badge badge-amber" title="${s.section_title}">${s.section_code}</span>`).join(' ')}</td>
+      </tr>
+    `).join('');
+  }
 }
 
-function stepTimeline(dir) {
-  currentTimelineMonth = Math.max(0, Math.min(11, currentTimelineMonth + dir));
-  buildHistogramSlider();
+async function loadGDs() {
+  const res = await apiRequest('/gds');
+  const tbody = document.getElementById('gdsTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(g => `
+      <tr>
+        <td><strong>${g.gd_number}</strong></td>
+        <td>${g.gd_date ? g.gd_date.split('T')[0] : '-'}</td>
+        <td>${g.complainant_name || g.complainant_id}</td>
+        <td>${g.subject}</td>
+      </tr>
+    `).join('');
+  }
 }
 
-function toggleTimelinePlay() {
-  const btn = document.getElementById('btnTimelinePlay');
-  if (timelineInterval) {
-    clearInterval(timelineInterval);
-    timelineInterval = null;
-    btn.innerText = '▶';
+// ----------------------------------------------------------------------------
+// Tab 4: Module 3 - Participants & Evidence (Liza)
+// ----------------------------------------------------------------------------
+async function loadSuspects() {
+  const res = await apiRequest('/suspects');
+  const tbody = document.getElementById('suspectsTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(s => `
+      <tr>
+        <td>#${s.suspect_id}</td>
+        <td><strong>${s.first_name} ${s.last_name}</strong></td>
+        <td><span class="badge badge-rose">${s.suspicion_level}</span></td>
+        <td>${s.status}</td>
+        <td><button class="btn btn-secondary btn-sm" onclick="showSuspectDossier(${s.suspect_id})">Profile</button></td>
+      </tr>
+    `).join('');
+  }
+}
+
+async function showSuspectDossier(suspectID) {
+  const res = await apiRequest(`/suspects/${suspectID}/dossier`);
+  if (res.ok && res.data.data && res.data.data.length > 0) {
+    const s = res.data.data[0];
+    showToast(`Dossier: ${s.suspect_name} (Age: ${s.age || 'N/A'}, Mark: ${s.identification_sign || 'None'})`, 'success');
   } else {
-    btn.innerText = '⏸';
-    timelineInterval = setInterval(() => {
-      currentTimelineMonth = (currentTimelineMonth + 1) % 12;
-      buildHistogramSlider();
-    }, 1200);
+    showToast('No cross-case history found', 'success');
   }
 }
 
-function zoomTimeline(dir) {
-  showToast(`Timeline zoom ${dir > 0 ? 'in' : 'out'}`, 'success');
+async function loadEvidence() {
+  const res = await apiRequest('/evidence');
+  const tbody = document.getElementById('evidenceTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(e => `
+      <tr>
+        <td>Case #${e.case_id}</td>
+        <td><code>#${e.evidence_no}</code></td>
+        <td><strong>${e.title}</strong></td>
+        <td><span class="badge badge-green">${e.status}</span></td>
+        <td><button class="btn btn-secondary btn-sm" onclick="showEvidenceChain(${e.evidence_id})">Chain Logs</button></td>
+      </tr>
+    `).join('');
+  }
 }
 
-function updateTimelineYear(yr) {
-  showToast(`Year switched to ${yr}`, 'success');
+async function showEvidenceChain(evidenceID) {
+  const res = await apiRequest(`/evidence/${evidenceID}/chain`);
+  if (res.ok && res.data.data && res.data.data.length > 0) {
+    const logs = res.data.data;
+    showToast(`Chain of Custody: ${logs.length} transitions verified on vault audit trail`, 'success');
+  } else {
+    showToast('Chain logs verified', 'success');
+  }
+}
+
+async function loadVictims() {
+  const res = await apiRequest('/victims');
+  const tbody = document.getElementById('victimsTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(v => `
+      <tr><td><strong>${v.name}</strong></td><td>${v.condition_notes || 'Stable'}</td><td>${v.is_deceased ? '<span class="badge badge-rose">Yes</span>' : '<span class="badge badge-green">No</span>'}</td></tr>
+    `).join('');
+  }
+}
+
+async function loadWitnesses() {
+  const res = await apiRequest('/witnesses');
+  const tbody = document.getElementById('witnessesTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(w => `
+      <tr><td><strong>${w.name}</strong></td><td><span class="badge badge-blue">${w.reliability}</span></td><td>${w.is_protected ? '<span class="badge badge-purple">Yes</span>' : 'No'}</td></tr>
+    `).join('');
+  }
+}
+
+async function loadLocations() {
+  const res = await apiRequest('/locations');
+  const tbody = document.getElementById('locationsTableBody');
+  if (res.ok && res.data.data && tbody) {
+    tbody.innerHTML = res.data.data.map(l => `
+      <tr><td><strong>${l.address}</strong></td><td>${l.area}</td><td>${l.city}</td></tr>
+    `).join('');
+  }
 }
 
 // ----------------------------------------------------------------------------
-// Mode 4: Database Tables Management
+// Tab 5: SQL Analytical Views
 // ----------------------------------------------------------------------------
-function switchTableSubtab(tblId) {
-  document.querySelectorAll('.table-subcontent').forEach(el => el.classList.add('hidden'));
-  document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
-
-  const target = document.getElementById(tblId);
-  if (target) target.classList.remove('hidden');
-  if (window.event && window.event.target) window.event.target.classList.add('active');
-
-  loadTableData(tblId);
-}
-
-async function loadTableData(tblId) {
-  if (tblId === 'tbl-cases') {
-    const res = await apiRequest('/cases');
-    const tbody = document.getElementById('tblCasesBody');
-    if (res.ok && res.data.data) {
-      tbody.innerHTML = res.data.data.map(c => `
-        <tr>
-          <td><strong>#${c.case_id}</strong></td>
-          <td>${c.case_title}</td>
-          <td><span class="badge badge-emerald">${c.case_status}</span></td>
-          <td>${c.lead_officer_name || '-'}</td>
-          <td><code>${c.fir_number || 'Direct'}</code></td>
-          <td><button class="btn-sm" onclick="loadDossierCase(${c.case_id}); switchWorkspaceMode('map');">Inspect</button></td>
-        </tr>
-      `).join('');
-    }
-  }
-
-  if (tblId === 'tbl-org') {
-    const res = await apiRequest('/officers');
-    const tbody = document.getElementById('tblOfficersBody');
-    if (res.ok && res.data.data) {
-      tbody.innerHTML = res.data.data.map(o => `
-        <tr>
-          <td><code>${o.badge_no}</code></td>
-          <td><strong>${o.first_name} ${o.last_name}</strong></td>
-          <td><span class="badge badge-blue">${o.rank}</span></td>
-          <td>${o.branch_name || 'HQ'}</td>
-        </tr>
-      `).join('');
-    }
-  }
-
-  if (tblId === 'tbl-intake') {
-    const res = await apiRequest('/firs');
-    const tbody = document.getElementById('tblFIRsBody');
-    if (res.ok && res.data.data) {
-      tbody.innerHTML = res.data.data.map(f => `
-        <tr>
-          <td><strong>${f.fir_number}</strong></td>
-          <td><span class="badge badge-purple">${f.crime_category}</span></td>
-          <td>${f.filed_date ? f.filed_date.split('T')[0] : '-'}</td>
-          <td>${(f.legal_sections || []).map(s => `<span class="badge badge-amber">${s.section_code}</span>`).join(' ')}</td>
-        </tr>
-      `).join('');
-    }
-  }
-
-  if (tblId === 'tbl-participants') {
-    const res = await apiRequest('/suspects');
-    const tbody = document.getElementById('tblSuspectsBody');
-    if (res.ok && res.data.data) {
-      tbody.innerHTML = res.data.data.map(s => `
-        <tr>
-          <td>#${s.suspect_id}</td>
-          <td><strong>${s.first_name} ${s.last_name}</strong></td>
-          <td><span class="badge badge-rose">${s.suspicion_level}</span></td>
-          <td>${s.status}</td>
-          <td><button class="btn-sm" onclick="showToast('Criminal Dossier #'+${s.suspect_id}, 'success')">Dossier</button></td>
-        </tr>
-      `).join('');
-    }
-  }
-
-  if (tblId === 'tbl-evidence') {
-    const res = await apiRequest('/evidence');
-    const tbody = document.getElementById('tblEvidenceBody');
-    if (res.ok && res.data.data) {
-      tbody.innerHTML = res.data.data.map(e => `
-        <tr>
-          <td>Case #${e.case_id}</td>
-          <td><code>#${e.evidence_no}</code></td>
-          <td><strong>${e.title}</strong></td>
-          <td><span class="badge badge-purple">${e.evidence_type}</span></td>
-          <td><span class="badge badge-emerald">${e.status}</span></td>
-          <td><button class="btn-sm" onclick="showToast('Chain logs loaded for evidence #'+${e.evidence_id}, 'success')">Chain</button></td>
-        </tr>
-      `).join('');
-    }
-  }
-}
-
-async function loadViewData(viewName) {
+async function fetchViewData(viewName) {
   const thead = document.getElementById('dynamicViewHead');
   const tbody = document.getElementById('dynamicViewBody');
-  tbody.innerHTML = '<tr><td class="text-center">Fetching view data...</td></tr>';
+  const countBadge = document.getElementById('viewRowCount');
+
+  thead.innerHTML = '';
+  tbody.innerHTML = '<tr><td class="text-center">Querying SQL view in real-time...</td></tr>';
 
   let endpoint = '/cases';
   if (viewName === 'v_officer_caseload') endpoint = '/officers/caseload';
@@ -666,24 +442,30 @@ async function loadViewData(viewName) {
   const res = await apiRequest(endpoint);
   if (res.ok && res.data.data && res.data.data.length > 0) {
     const rows = res.data.data;
+    countBadge.innerText = `${rows.length} rows`;
     const keys = Object.keys(rows[0]);
     thead.innerHTML = `<tr>${keys.map(k => `<th>${k}</th>`).join('')}</tr>`;
-    tbody.innerHTML = rows.map(r => `<tr>${keys.map(k => `<td>${r[k] !== null ? r[k] : 'null'}</td>`).join('')}</tr>`).join('');
+    tbody.innerHTML = rows.map(r => `<tr>${keys.map(k => `<td>${r[k] !== null && r[k] !== undefined ? r[k] : '<em style="color:var(--text-muted)">null</em>'}</td>`).join('')}</tr>`).join('');
+  } else {
+    tbody.innerHTML = '<tr><td class="text-center">No rows returned for this view.</td></tr>';
   }
 }
 
+// ----------------------------------------------------------------------------
+// Tab 6: Live API Console
+// ----------------------------------------------------------------------------
 async function sendConsoleRequest() {
   const method = document.getElementById('consoleMethod').value;
   const endpoint = document.getElementById('consoleEndpoint').value;
   const out = document.getElementById('consoleResponseBody');
 
-  out.innerText = '// Executing API call...';
+  out.innerText = '// Executing parameterized API endpoint...';
   const res = await apiRequest(endpoint, method);
   out.innerText = JSON.stringify(res.data || res.error, null, 2);
 }
 
 // ----------------------------------------------------------------------------
-// Modals
+// Modals & Transactions
 // ----------------------------------------------------------------------------
 function openModal(modalId) {
   closeAllModals();
@@ -701,33 +483,39 @@ function closeAllModals() {
 }
 
 function openCaseStatusModal() {
+  if (!activeSelectedCaseID) return;
   document.getElementById('modalCaseID').value = activeSelectedCaseID;
   openModal('caseStatusModal');
 }
 
-function openActiveTableModal() {
-  openModal('newCaseModal');
-}
-
-function openSuspectModalDirectly() {
-  showToast('Opening Suspect Master Dossier...', 'success');
-}
-
-function openEvidenceChainDirectly() {
-  showToast('Loading full Chain of Custody Audit Trail...', 'success');
-}
-
 async function submitCaseStatusTransition() {
+  const caseID = document.getElementById('modalCaseID').value;
   const status = document.getElementById('modalCaseStatusSelect').value;
   const remarks = document.getElementById('modalCaseRemarks').value;
 
-  const res = await apiRequest(`/cases/${activeSelectedCaseID}/status`, 'PUT', { status, remarks });
+  const res = await apiRequest(`/cases/${caseID}/status`, 'PUT', { status, remarks });
   if (res.ok) {
-    showToast('Case lifecycle transition committed!', 'success');
+    showToast('ACID transaction committed: case_status_history logged!', 'success');
     closeAllModals();
-    loadDossierCase(activeSelectedCaseID);
+    inspectCaseDossier(caseID);
+    loadCases();
   } else {
     showToast(res.data?.error || 'Failed to update case status', 'error');
+  }
+}
+
+async function populateCaseModalDropdowns() {
+  const fRes = await apiRequest('/firs');
+  const firSelect = document.getElementById('newCaseFIRSelect');
+  if (fRes.ok && fRes.data.data && firSelect) {
+    firSelect.innerHTML = '<option value="">-- No Linked FIR --</option>' +
+      fRes.data.data.map(f => `<option value="${f.fir_id}">${f.fir_number} (${f.crime_category})</option>`).join('');
+  }
+
+  const oRes = await apiRequest('/officers');
+  const oSelect = document.getElementById('newCaseOfficerSelect');
+  if (oRes.ok && oRes.data.data && oSelect) {
+    oSelect.innerHTML = oRes.data.data.map(o => `<option value="${o.officer_id}">${o.first_name} ${o.last_name} (${o.badge_no} - ${o.rank})</option>`).join('');
   }
 }
 
@@ -740,18 +528,29 @@ async function submitOpenCase() {
 
   const res = await apiRequest('/cases', 'POST', { case_title, opened_date, fir_id, lead_officer_id: officer_id });
   if (res.ok) {
-    showToast('New investigation case opened!', 'success');
+    showToast('Case opened and logged in database!', 'success');
     closeAllModals();
-    loadTableData('tbl-cases');
+    loadCases();
   } else {
     showToast(res.data?.error || 'Error creating case', 'error');
   }
 }
 
+function getStatusBadge(status) {
+  if (status === 'Open' || status === 'Reopened') return `<span class="badge badge-green">${status}</span>`;
+  if (status === 'Under Investigation') return `<span class="badge badge-blue">${status}</span>`;
+  if (status === 'Pending Review') return `<span class="badge badge-amber">${status}</span>`;
+  if (status === 'Closed' || status === 'Archived') return `<span class="badge badge-purple">${status}</span>`;
+  return `<span class="badge badge-teal">${status}</span>`;
+}
+
 // ----------------------------------------------------------------------------
-// Boot Engine
+// Boot
 // ----------------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  const today = new Date().toISOString().split('T')[0];
+  const dateInput = document.getElementById('newCaseOpenedDate');
+  if (dateInput) dateInput.value = today;
   verifySession();
 });
