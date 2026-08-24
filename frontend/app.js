@@ -1,9 +1,20 @@
 // ============================================================================
-// ORCUS DBMS Project - Presentation Demo Engine
+// ORCUS DBMS Project - Production Frontend Engine (Original Login Implementation)
 // Author: Md. Arafat Hossain Faisal (241400060)
+//
+// AUTH ARCHITECTURE:
+//   1. Login gate screen collects credentials -> POST /api/v1/auth/login
+//   2. Backend verifies bcrypt hash against MySQL `user.password_hash`
+//   3. Backend signs HMAC-SHA256 JWT (24h expiry) -> returned to browser
+//   4. Token persisted in localStorage, attached as 'Authorization: Bearer'
+//      header on every protected API call
+//   5. Session re-verified on reload via GET /api/v1/auth/me
+//   6. Any 401 response destroys the local session -> returns to login gate
 // ============================================================================
 
-let authToken = localStorage.getItem('orcus_test_token') || '';
+const TOKEN_STORAGE_KEY = 'orcus_auth_token';
+
+let authToken = localStorage.getItem(TOKEN_STORAGE_KEY) || '';
 let currentUser = null;
 let currentTheme = localStorage.getItem('orcus_theme') || 'dark';
 let activeSelectedCaseID = null;
@@ -31,10 +42,10 @@ function updateThemeButton() {
 }
 
 // ----------------------------------------------------------------------------
-// API Helper
+// API Helper (attaches JWT Bearer token, handles expired sessions globally)
 // ----------------------------------------------------------------------------
 async function apiRequest(endpoint, method = 'GET', body = null) {
-  const apiBase = (window.location.port === '5050') ? '' : 'http://localhost:5050';
+  const apiBase = window.location.port === '9874' ? 'http://localhost:5050' : '';
   const url = endpoint.startsWith('http') ? endpoint : `${apiBase}/api/v1${endpoint}`;
   const headers = { 'Content-Type': 'application/json' };
   if (authToken) {
@@ -51,6 +62,14 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     const response = await fetch(url, options);
     const latency = Math.round(performance.now() - startTime);
     const json = await response.json();
+
+    // Global guard: an expired/tampered token anywhere in the app forces logout
+    if (response.status === 401 && authToken && !endpoint.startsWith('/auth/login')) {
+      destroyLocalSession();
+      showLoginScreen('Your session has expired. Please sign in again.');
+      showToast('Session expired — please log in again', 'error');
+    }
+
     return { ok: response.ok, status: response.status, data: json, latency };
   } catch (err) {
     const latency = Math.round(performance.now() - startTime);
@@ -65,6 +84,142 @@ function showToast(message, type = 'success') {
   toast.innerText = message;
   toast.classList.remove('hidden');
   setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+function setStatusPill(state, text) {
+  const pill = document.getElementById('serverStatusPill');
+  const pillText = document.getElementById('serverStatusText');
+  if (!pill || !pillText) return;
+  const styles = {
+    connected: ['rgba(16, 185, 129, 0.15)', '#34d399'],
+    disconnected: ['rgba(244, 63, 94, 0.15)', '#fb7185'],
+    pending: ['rgba(245, 158, 11, 0.15)', '#fbbf24'],
+  }[state] || ['', ''];
+  pill.style.background = styles[0];
+  pill.style.color = styles[1];
+  pillText.innerText = text;
+}
+
+// ----------------------------------------------------------------------------
+// LOGIN GATE — Original Credential-Based Authentication
+// ----------------------------------------------------------------------------
+function showLoginScreen(notice = '') {
+  document.getElementById('appShell')?.classList.add('hidden');
+  const screen = document.getElementById('loginScreen');
+  if (screen) screen.classList.remove('hidden');
+
+  const errBox = document.getElementById('loginError');
+  if (notice && errBox) {
+    errBox.innerText = notice;
+    errBox.classList.remove('hidden');
+  }
+
+  const form = document.getElementById('loginForm');
+  if (form) form.reset();
+
+  setStatusPill('disconnected', 'Not Authenticated');
+}
+
+function enterApp(user) {
+  currentUser = user;
+  document.getElementById('loginScreen')?.classList.add('hidden');
+  document.getElementById('appShell')?.classList.remove('hidden');
+  updateUserBadge(user);
+  loadOverviewData();
+}
+
+async function handleLoginFormSubmit(event) {
+  event.preventDefault();
+
+  const usernameInput = document.getElementById('loginUsername');
+  const passwordInput = document.getElementById('loginPassword');
+  const submitBtn = document.getElementById('loginSubmitBtn');
+  const errBox = document.getElementById('loginError');
+
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+
+  errBox.classList.add('hidden');
+  submitBtn.disabled = true;
+  submitBtn.innerText = 'Authenticating…';
+  setStatusPill('pending', 'Verifying credentials…');
+
+  const res = await apiRequest('/auth/login', 'POST', { username, password });
+
+  submitBtn.disabled = false;
+  submitBtn.innerText = 'Sign In Securely';
+
+  if (res.ok && res.data.data && res.data.data.token) {
+    // Server issued a signed JWT — persist and hydrate the session
+    authToken = res.data.data.token;
+    localStorage.setItem(TOKEN_STORAGE_KEY, authToken);
+    enterApp(res.data.data.user);
+    setStatusPill('connected', 'Connected: MySQL 8.0 Live');
+    showToast(`Welcome back, ${res.data.data.user.username}`, 'success');
+  } else if (res.status === 0) {
+    setStatusPill('disconnected', 'Backend Unreachable');
+    errBox.innerText = 'Cannot reach ORCUS backend at :5050. Start the server and retry.';
+    errBox.classList.remove('hidden');
+  } else {
+    setStatusPill('disconnected', 'Authentication Failed');
+    errBox.innerText = res.data?.error || 'Invalid username or password.';
+    errBox.classList.remove('hidden');
+    passwordInput.value = '';
+    passwordInput.focus();
+  }
+}
+
+function togglePasswordVisibility() {
+  const input = document.getElementById('loginPassword');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function handleLogout() {
+  destroyLocalSession();
+  showLoginScreen();
+  showToast('Signed out securely. Token destroyed.', 'success');
+}
+
+function destroyLocalSession() {
+  authToken = '';
+  currentUser = null;
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+// ----------------------------------------------------------------------------
+// Session Bootstrap — verify stored JWT against /auth/me on every page load
+// ----------------------------------------------------------------------------
+async function initAuth() {
+  if (!authToken) {
+    showLoginScreen();
+    return;
+  }
+
+  setStatusPill('pending', 'Restoring session…');
+  const res = await apiRequest('/auth/me');
+
+  if (res.ok && res.data.data) {
+    enterApp(res.data.data);
+    setStatusPill('connected', 'Connected: MySQL 8.0 Live');
+    showToast(`Session restored: ${res.data.data.username}`, 'success');
+  } else if (res.status !== 401) {
+    // Network/server issue rather than bad token — let user retry login
+    showLoginScreen('Backend unreachable. Please sign in once the server is up.');
+  }
+}
+
+function updateUserBadge(user) {
+  const un = document.getElementById('navUsername');
+  const av = document.getElementById('userAvatar');
+  const roleEl = document.getElementById('navUserRole');
+  if (un) un.innerText = user.username;
+  if (av) av.innerText = (user.officer_name || user.username || '?')[0].toUpperCase();
+  if (roleEl) {
+    const roles = (user.roles && user.roles.length > 0) ? user.roles.join(', ') : 'No roles assigned';
+    roleEl.innerText = roles;
+    roleEl.title = `${user.badge_no ? 'Badge: ' + user.badge_no + ' • ' : ''}${roles} @ ${user.branch_name || 'HQ'}`;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -85,74 +240,6 @@ function switchTab(tabId) {
   if (tabId === 'tab-intake') { loadCases(); loadFIRs(); loadGDs(); populateCaseModalDropdowns(); }
   if (tabId === 'tab-participants') { loadSuspects(); loadEvidence(); loadVictims(); loadWitnesses(); loadLocations(); }
   if (tabId === 'tab-views') fetchViewData('v_case_overview');
-}
-
-// ----------------------------------------------------------------------------
-// Auth & Session
-// ----------------------------------------------------------------------------
-async function quickLogin(username, password, label) {
-  const res = await apiRequest('/auth/login', 'POST', { username, password });
-  const pill = document.getElementById('serverStatusPill');
-  const pillText = document.getElementById('serverStatusText');
-
-  if (res.ok && res.data.data && res.data.data.token) {
-    authToken = res.data.data.token;
-    currentUser = res.data.data.user;
-    localStorage.setItem('orcus_test_token', authToken);
-    updateUserBadge(currentUser);
-    if (pill && pillText) {
-      pill.style.background = 'rgba(16, 185, 129, 0.15)';
-      pill.style.color = '#34d399';
-      pillText.innerText = 'Connected: MySQL 8.0 Live';
-    }
-    showToast(`Authenticated as ${label}`, 'success');
-    loadOverviewData();
-  } else {
-    if (pill && pillText) {
-      pill.style.background = 'rgba(244, 63, 94, 0.15)';
-      pill.style.color = '#fb7185';
-      pillText.innerText = 'Database Disconnected';
-    }
-    showToast(`Login failed: ${res.data?.error || res.error}`, 'error');
-  }
-}
-
-function handleRoleSwitch(val) {
-  if (val === 'admin_faisal') quickLogin('admin_faisal', 'password123', 'Admin Faisal');
-  if (val === 'investigator_sarah') quickLogin('investigator_sarah', 'password123', 'Lead Sarah');
-  if (val === 'detective_fahim') quickLogin('detective_fahim', 'password123', 'Detective Fahim');
-  if (val === 'forensic_tariq') quickLogin('forensic_tariq', 'password123', 'Forensic Tariq');
-}
-
-async function verifySession() {
-  if (!authToken) {
-    await quickLogin('admin_faisal', 'password123', 'Admin Faisal');
-    return;
-  }
-
-  const res = await apiRequest('/auth/me');
-  const pill = document.getElementById('serverStatusPill');
-  const pillText = document.getElementById('serverStatusText');
-
-  if (res.ok && res.data.data) {
-    currentUser = res.data.data;
-    updateUserBadge(currentUser);
-    if (pill && pillText) {
-      pill.style.background = 'rgba(16, 185, 129, 0.15)';
-      pill.style.color = '#34d399';
-      pillText.innerText = 'Connected: MySQL 8.0 Live';
-    }
-    loadOverviewData();
-  } else {
-    await quickLogin('admin_faisal', 'password123', 'Admin Faisal');
-  }
-}
-
-function updateUserBadge(user) {
-  const un = document.getElementById('navUsername');
-  const av = document.getElementById('userAvatar');
-  if (un) un.innerText = user.username;
-  if (av) av.innerText = (user.username || 'F')[0].toUpperCase();
 }
 
 // ----------------------------------------------------------------------------
@@ -296,7 +383,7 @@ async function inspectCaseDossier(caseID) {
       </div>
 
       <div style="margin-top:8px;">
-        <div class="dossier-section-title">📜 Lifecycle History (case_status_history)</div>
+        <div class="dossier-section-title">📜 Lifecycle History (${d.status_history?.length || 0})</div>
         ${(d.status_history && d.status_history.length > 0) ? d.status_history.map(h => `
           <div style="font-size:11px; padding:4px 0; border-bottom:1px solid var(--border);">
             <strong>${h.status}</strong> by <em>${h.changed_by || 'System'}</em> at ${h.changed_at ? h.changed_at.split('T')[0] : ''}
@@ -546,12 +633,14 @@ function getStatusBadge(status) {
 }
 
 // ----------------------------------------------------------------------------
-// Boot
+// Boot — theme first, then authenticate before revealing any data
 // ----------------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   const today = new Date().toISOString().split('T')[0];
   const dateInput = document.getElementById('newCaseOpenedDate');
   if (dateInput) dateInput.value = today;
-  verifySession();
+
+  document.getElementById('loginForm')?.addEventListener('submit', handleLoginFormSubmit);
+  initAuth();
 });
