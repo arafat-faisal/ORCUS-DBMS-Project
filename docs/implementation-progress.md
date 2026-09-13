@@ -1,0 +1,305 @@
+# ORCUS Rebuild & Transformation - Implementation Progress
+
+**Project**: ORCUS (Organized Crime Understanding System)  
+**Branch**: `rebuild/orcus-v2`  
+**Database**: `orcus_db` (MySQL 8.0+ / InnoDB)  
+**Status**: In Progress  
+
+---
+
+## Phase Execution Checklist
+
+- [x] **Phase 0: Baseline, Backup, and Clean Branch**
+  - Git Branch created: `rebuild/orcus-v2`
+  - Baseline recorded: 25 tables, 5 views, 4 passing backend tests, 61 frontend lint problems
+  - MySQL Backup confirmed: `C:\Users\Arafat\orcus_db_backup_20260913_1635.sql` (51,085 bytes)
+  - Pre-rebuild audit preserved in `docs/pre-rebuild-audit-summary.md`
+- [x] **Phase 1: Critical Security Remediation**
+  - Removed all backdoor/universal fallback passwords (`password123`, `admin123`, `secret`).
+  - Enforced 100% bcrypt hash verification; seeded authentic hashes for all 9 demo accounts.
+  - Eliminated automatic admin login on client; unauthenticated users redirect to `/login`.
+  - Replaced `localStorage` JWT storage with secure `HttpOnly; SameSite=Lax` cookies.
+  - Added dedicated `/login` page with accessible bilingual English/বাংলা controls, rate-limit & disabled-account feedback.
+  - Added in-memory sliding window brute-force throttling (max 5 failed attempts per 15 min).
+  - Rotated JWT signing secret with cryptographically generated 256-bit key; excluded `.env` from Git.
+  - Replaced wildcard CORS with strict origin allowlist.
+  - All backend tests (`go test -v ./...`), `go vet`, frontend lint (`npm run lint`), and Next.js production build (`npm run build`) pass.
+- [x] **Phase 2: Database Migration System**
+  - Created versioned migration suite `database/migrations/` (0001 to 0005 with .up.sql and .down.sql).
+  - Created Go migration CLI `backend/cmd/tools/migrate/main.go` supporting `up`, `down`, and `status`.
+  - Tested upgrade, rollback, and re-apply idempotency on disposable test database.
+  - Migrated production `orcus_db` safely: zero record deletions, expanded to 38 tables and 5 views.
+  - Updated `database/schema.sql` with full v2.0 clean schema.
+- [x] **Phase 3: System-Wide Audit Log**
+  - Implemented immutable `audit_log` repository, service, and handler.
+  - Added cryptographic `X-Request-ID` generation and context tracing in logger middleware.
+  - Implemented sensitive data sanitizer masking passwords, tokens, and personal IDs in before/after summaries.
+  - Built protected endpoint `/api/v1/admin/audit-logs` with pagination and multi-parameter filtering.
+  - Created `/admin/audit-logs` frontend view with filters, pagination, and inspection drawer.
+  - Added automated test suite `TestAuditLogging_Verification` covering success/failure audits, RBAC (403), and anonymous (401) protection.
+- [x] **Phase 4: User Roles and Authorization**
+  - Defined discrete atomic permission codes and role-permission matrix in `backend/internal/auth/permissions.go`.
+  - Implemented `RequirePermission`, `RequireAnyPermission`, and `RequireNotRoles` in `backend/internal/middleware/rbac.go`.
+  - Removed universal Administrator bypass; enforced strict Separation of Duties.
+  - Migrated live `user_role` mappings across all 10 users to align with the standard 8 roles.
+  - Seeded demonstration Public Complainant account `complainant_rahim`.
+  - Documented complete role-permission architecture in `docs/permissions.md`.
+  - Added comprehensive negative authorization suite `TestRoleAuthorization_SeparationOfDuties`.
+- [x] **Phase 5: Bangladesh Geography and Localization**
+  - Seeded and normalized 8 administrative Divisions, major Districts, Thanas, and Upazilas in `orcus_db`.
+  - Built `GeographyRepository`, `GeographyService`, and `GeographyHandler` exposing public endpoints `/geo/divisions`, `/geo/districts`, `/geo/upazilas`, `/geo/thanas`.
+  - Implemented Bangladesh mobile validation and E.164 normalization (`NormalizeBDMobile`, `FormatBDMobileReadable`).
+  - Implemented identity document masking utility (`MaskIdentityDocument`).
+  - Created bilingual context provider (`frontend/src/lib/locale.tsx`) with English and বাংলা translations, numeral localization, Asia/Dhaka timezone formatting.
+  - Implemented accessible `LanguageSelector` and required national emergency 999 hotline `EmergencyDisclaimer`.
+  - Integrated `TestBangladeshGeographyAndLocalization` in backend test suite (7/7 tests passing).
+- [ ] **Phase 6: Complaint Workflow**
+- [ ] **Phase 7: Server-Side Identifier Generation**
+- [ ] **Phase 8: GD and FIR Workflows**
+- [ ] **Phase 9: Case Management and Assignment History**
+- [ ] **Phase 10: Investigation Activity or Case Diary**
+- [ ] **Phase 11: Participant Management**
+- [ ] **Phase 12: Evidence and Chain of Custody**
+- [ ] **Phase 13: Frontend Architecture (App Router)**
+- [ ] **Phase 14: UI and UX Design (Professional Bangladesh Context)**
+- [ ] **Phase 15: Real Dashboard Analytics**
+- [ ] **Phase 16: Search**
+- [ ] **Phase 17: Reports and Printing**
+- [ ] **Phase 18: API Quality and Data Integrity**
+- [ ] **Phase 19: File Attachments**
+- [ ] **Phase 20: Testing & Verification**
+- [ ] **Phase 21: Seed Data**
+- [ ] **Phase 22: Legacy Cleanup**
+- [ ] **Phase 23: Final Live Demonstration Flow**
+
+---
+
+## Phase Logs
+
+### Phase 0: Baseline, Backup, and Clean Branch
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Validated current repository state and verified clean MySQL backup generation via `mysqldump`.
+  - Created implementation branch `rebuild/orcus-v2`.
+  - Stored pre-rebuild audit baseline in `docs/pre-rebuild-audit-summary.md`.
+- **Decisions**: Preserved existing Next.js frontend scaffolding in `frontend/` while deprecating `test-frontend/`.
+
+### Phase 1: Critical Security Remediation
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Removed all universal password fallback logic in `backend/internal/service/auth_service.go`.
+  - Added thread-safe in-memory login attempt rate limiter (`backend/internal/service/throttle.go`).
+  - Updated `backend/internal/handler/auth_handler.go` to set `HttpOnly` session cookie (`orcus_auth_token`, MaxAge=86400, SameSite=Lax).
+  - Added `POST /api/v1/auth/logout` endpoint that invalidates the session cookie (`MaxAge=-1`).
+  - Updated `backend/internal/middleware/auth.go` to inspect cookie first with header fallback.
+  - Replaced wildcard CORS with strict allowlist (`backend/internal/middleware/cors.go`).
+  - Added config validation (`backend/internal/config/config.go`) and untracked `backend/.env` from Git.
+  - Generated genuine bcrypt password hashes for all seed accounts using `backend/cmd/tools/seed_passwords/main.go`.
+  - Removed auto-login from `frontend/src/app/page.tsx` and redirected unauthenticated sessions to `/login`.
+  - Created dedicated `/login` page (`frontend/src/app/login/page.tsx`) with bilingual English/বাংলা support, accessible labels, show/hide password, and error states.
+  - Converted frontend `ApiClient` (`frontend/src/lib/api.ts`) to use `credentials: "include"`, removed `localStorage` token storage, and eliminated `any` types.
+  - Added comprehensive security suite `TestSecurity_BackdoorRejectedAndCookies` in `backend/server_test.go`.
+- **Files Changed**:
+  - `backend/internal/service/auth_service.go`
+  - `backend/internal/service/throttle.go`
+  - `backend/internal/handler/auth_handler.go`
+  - `backend/internal/handler/router.go`
+  - `backend/internal/middleware/auth.go`
+  - `backend/internal/middleware/cors.go`
+  - `backend/internal/config/config.go`
+  - `backend/server_test.go`
+  - `backend/cmd/tools/seed_passwords/main.go`
+  - `backend/.env.example`
+  - `.gitignore`
+  - `frontend/src/lib/api.ts`
+  - `frontend/src/lib/types.ts`
+  - `frontend/src/app/page.tsx`
+  - `frontend/src/app/login/page.tsx`
+  - `frontend/src/app/globals.css`
+  - `frontend/src/components/entry/WaterRippleGate.tsx`
+  - `frontend/src/components/modals/IntakeModal.tsx`
+  - `frontend/src/components/modals/CaseDossierModal.tsx`
+- **Tests Run & Passed**:
+  - `go test -v ./...`: 5 test suites passed (100%).
+  - `go vet ./...`: 0 warnings.
+  - `npm run lint`: 0 errors.
+  - `npm run build`: Next.js production build succeeded.
+- **Decisions**:
+  - Stored user profile in `sessionStorage` strictly as temporary view cache, while all authorization relies exclusively on the browser's `HttpOnly` cookie.
+
+### Phase 2: Database Migration System
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Established versioned migration structure under `database/migrations/`.
+  - Authored ordered `.up.sql` and `.down.sql` migrations (0001 through 0005).
+  - Built standalone Go migration CLI at `backend/cmd/tools/migrate/main.go` supporting `up`, `down`, and `status`.
+  - Validated migration execution, rollback, and re-execution on disposable test database `orcus_migration_test_db`.
+  - Migrated live `orcus_db` schema to version 5, expanding to 38 tables and 5 views while preserving 100% of pre-existing records.
+  - Automatically backfilled `case_assignment_history` records for all active cases.
+  - Hardened evidence chain of custody by altering foreign key deletion rule to `ON DELETE RESTRICT`.
+  - Updated master `database/schema.sql` to represent clean v2.0 installation.
+- **Files Changed**:
+  - `database/migrations/0001_security_and_audit.up.sql`
+  - `database/migrations/0001_security_and_audit.down.sql`
+  - `database/migrations/0002_complaint_workflow.up.sql`
+  - `database/migrations/0002_complaint_workflow.down.sql`
+  - `database/migrations/0003_assignment_and_activity.up.sql`
+  - `database/migrations/0003_assignment_and_activity.down.sql`
+  - `database/migrations/0004_bangladesh_geography.up.sql`
+  - `database/migrations/0004_bangladesh_geography.down.sql`
+  - `database/migrations/0005_number_sequences.up.sql`
+  - `database/migrations/0005_number_sequences.down.sql`
+  - `backend/cmd/tools/migrate/main.go`
+  - `database/schema.sql`
+- **Migrations Applied**:
+  - `0001_security_and_audit`
+  - `0002_complaint_workflow`
+  - `0003_assignment_and_activity`
+  - `0004_bangladesh_geography`
+  - `0005_number_sequences`
+- **Tests Run & Passed**:
+  - Test database upgrade test: 5 migrations applied cleanly.
+  - Test database rollback test: `0005_number_sequences.down.sql` rolled back and re-applied cleanly.
+  - Main database upgrade: 5 migrations applied cleanly.
+  - Record integrity check: 9 users, 8 officers, 6 branches, 5 cases preserved.
+  - Backend integration suite: `go test -count=1 ./...` passed (100%).
+- **Decisions**:
+  - Used MariaDB/MySQL native `IF NOT EXISTS` syntax to ensure migrations are idempotent and safe on both fresh installs and live upgrades.
+  - Enforced `ON DELETE RESTRICT` on evidence custody history so chain of custody can never be pruned by accidental or malicious evidence deletion.
+
+### Phase 3: System-Wide Audit Log
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Defined `AuditLog` and `AuditFilter` domain models in `backend/internal/models/audit.go`.
+  - Implemented `AuditRepository` with parameterized dynamic query filters and pagination in `backend/internal/repository/audit_repository.go`.
+  - Implemented `AuditService` with automatic JSON/text sanitization masking sensitive tokens and credentials in `backend/internal/service/audit_service.go`.
+  - Implemented `AuditHandler` providing `GET /api/v1/admin/audit-logs` in `backend/internal/handler/audit_handler.go`.
+  - Updated `LoggerMiddleware` to automatically generate, attach, and trace `X-Request-ID` across HTTP headers and Gin context.
+  - Wired audit logging into authentication events (successful login, failed login, logout).
+  - Built dedicated frontend view `/admin/audit-logs` (`frontend/src/app/admin/audit-logs/page.tsx`) with search, event filters, date range filters, pagination, and expandable inspection drawer.
+  - Added automated test suite `TestAuditLogging_Verification` in `backend/server_test.go` covering event creation, sensitive field sanitization, RBAC restriction (403), and unauthenticated access prevention (401).
+- **Files Changed**:
+  - `backend/internal/models/audit.go`
+  - `backend/internal/models/response.go`
+  - `backend/internal/repository/audit_repository.go`
+  - `backend/internal/service/audit_service.go`
+  - `backend/internal/handler/audit_handler.go`
+  - `backend/internal/handler/auth_handler.go`
+  - `backend/internal/handler/router.go`
+  - `backend/internal/middleware/auth.go`
+  - `backend/internal/middleware/logger.go`
+  - `backend/cmd/server/main.go`
+  - `backend/server_test.go`
+  - `frontend/src/lib/types.ts`
+  - `frontend/src/lib/api.ts`
+  - `frontend/src/app/admin/audit-logs/page.tsx`
+- **Tests Run & Passed**:
+  - `go test -v -run TestAuditLogging_Verification ./...`: Passed (100%).
+  - `npm run lint`: Passed with 0 errors.
+  - `npm run build`: Passed with 0 errors.
+- **Decisions**:
+  - Audit logs are strictly append-only; ordinary application users cannot update or delete records.
+  - Sensitive parameters (passwords, tokens, NID strings) are scrubbed before persistence.
+  - UI access is guarded both in frontend routing and at the backend middleware level (`Administrator` and `System Auditor` roles only).
+
+### Phase 4: User Roles and Authorization
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Defined 14 atomic permissions in `backend/internal/auth/permissions.go` covering administrative, intake, case management, supervision, evidence, and audit.
+  - Formulated authoritative role-permission mapping for the 8 standard roles: Administrator, Duty Officer, Officer-in-Charge, Investigating Officer, Evidence Officer, Supervising Officer, System Auditor, and Public Complainant.
+  - Updated `backend/internal/middleware/rbac.go` with `RequirePermission`, `RequireAnyPermission`, and `RequireNotRoles`.
+  - Enforced strict Separation of Duties: Administrator does not possess permissions to create complaints, open cases, or alter physical evidence custody.
+  - Migrated live `user_role` mappings in `orcus_db` via `backend/cmd/tools/migrate_roles/main.go`.
+  - Provisioned and seeded public citizen account `complainant_rahim` with bcrypt hash.
+  - Secured Gin router groups in `backend/internal/handler/router.go` using atomic permissions and blocked Public Complainant accounts from all internal operational routes.
+  - Penned comprehensive authorization documentation in `docs/permissions.md`.
+  - Added automated test suite `TestRoleAuthorization_SeparationOfDuties` in `backend/server_test.go` proving 403 Forbidden on unauthorized operational mutations.
+- **Files Changed**:
+  - `backend/internal/auth/permissions.go`
+  - `backend/internal/middleware/rbac.go`
+  - `backend/internal/handler/router.go`
+  - `backend/cmd/tools/migrate_roles/main.go`
+  - `backend/server_test.go`
+  - `docs/permissions.md`
+- **Tests Run & Passed**:
+  - `go test -v ./...`: 6/6 test suites passed (100%).
+  - `npm run lint`: 0 errors.
+  - `npm run build`: Next.js production build succeeded.
+- **Decisions**:
+  - Replaced scattered string role comparisons with centralized atomic permission codes.
+  - Enforced that investigation integrity cannot be bypassed by system administrators.
+
+### Phase 5: Bangladesh Geography and Localization
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Populated administrative tables with Bangladesh Divisions, Districts, Thanas, and Upazilas.
+  - Enhanced `location` and `agency_branch` with administrative division, district, thana foreign keys and Bengali names.
+  - Defined `GeoDivision`, `GeoDistrict`, `GeoUpazila`, and `GeoThana` models in `backend/internal/models/geography.go`.
+  - Implemented `GeographyRepository`, `GeographyService`, and `GeographyHandler` serving `/api/v1/geo/divisions`, `/api/v1/geo/districts`, `/api/v1/geo/upazilas`, `/api/v1/geo/thanas`.
+  - Created validation and normalization engine in `backend/internal/service/validation.go` standardizing Bangladesh mobile numbers into canonical E.164 (`+8801XXXXXXXXX`) and masked identity strings.
+  - Created `LocaleProvider` React context in `frontend/src/lib/locale.tsx` supporting seamless toggle between English and বাংলা with persisted choice in `localStorage`.
+  - Added Asia/Dhaka timezone date formatter with Bengali numeral conversion (`০-৯`).
+  - Created `LanguageSelector` component and national `EmergencyDisclaimer` component detailing the academic prototype boundary and 999 hotline guidance.
+  - Connected `LocaleProvider` into RootLayout (`frontend/src/app/layout.tsx`) and synced `LoginPage`.
+  - Authored automated test suite `TestBangladeshGeographyAndLocalization` in `backend/server_test.go` covering hierarchy queries, mobile normalization, and document masking.
+- **Files Changed**:
+  - `backend/internal/models/geography.go`
+  - `backend/internal/models/participant.go`
+  - `backend/internal/models/organization.go`
+  - `backend/internal/repository/geography_repository.go`
+  - `backend/internal/service/geography_service.go`
+  - `backend/internal/service/validation.go`
+  - `backend/internal/handler/geography_handler.go`
+  - `backend/internal/handler/router.go`
+  - `backend/cmd/server/main.go`
+  - `backend/server_test.go`
+  - `frontend/src/lib/locale.tsx`
+  - `frontend/src/components/common/LanguageSelector.tsx`
+  - `frontend/src/components/common/EmergencyDisclaimer.tsx`
+  - `frontend/src/app/layout.tsx`
+  - `frontend/src/app/login/page.tsx`
+- **Tests Run & Passed**:
+  - `go test -v ./...`: 7/7 test suites passed (100%).
+  - `npm run lint`: 0 errors.
+  - `npm run build`: Next.js production build succeeded.
+### Phase 6: Complaint Workflow & Phase 7: Server-Side Identifier Generation
+- **Date**: 2026-09-13
+- **Tasks Completed**:
+  - Implemented `SequenceService` (`backend/internal/service/sequence_service.go`) generating atomic, concurrency-safe, year-aware, and branch-aware official identifiers (`CMP-DHK-2026-000001`, `GD-DHK-MOT-2026-000001`, `FIR-DHK-MOT-2026-000001`, `CASE-DHK-MOT-2026-000001`, `EVID-CASE-001`).
+  - Added full domain models for `Complaint`, `ComplaintStatusHistory`, `ComplaintTransferHistory`, and `ComplaintCategory` in `backend/internal/models/complaint.go`.
+  - Built `ComplaintRepository` in `backend/internal/repository/complaint_repository.go` supporting transactional creation, assessment history recording, transfer history, and parameterized filtering.
+  - Built `ComplaintService` with validated state machine: Draft $\to$ Submitted $\to$ Under Review $\to$ Correction Required $\to$ Verified $\to$ Converted to GD / Converted to FIR $\to$ Transferred $\to$ Rejected $\to$ Resolved $\to$ Closed. Rejects illegal jumps with 409 Conflict.
+  - Implemented `ComplaintHandler` providing public endpoints (`GET /complaint-categories`, `POST /public/complaints`, `GET /public/complaints/track`) and officer endpoints (`GET /complaints`, `POST /complaints`, `GET /complaints/:id`, `POST /complaints/:id/assess`, `POST /complaints/:id/transfer`, `GET /complaints/:id/history`, `GET /complaints/:id/transfers`).
+  - Public complaint tracking enforces privacy and two-factor identity match (`tracking_code` + `phone`). Exposes only public-safe status and branch guidance; never leaks internal notes, suspects, witnesses, or officers.
+  - Created public intake UI page (`frontend/src/app/public/complaints/new/page.tsx`) with category selection, division/branch picker, phone normalization helper, 999 emergency banner, and acknowledgment card with copyable reference code.
+  - Created public tracking UI page (`frontend/src/app/public/complaints/track/page.tsx`) with two-factor verification form and safe status timeline.
+  - Created internal operational complaints pages (`/complaints`, `/complaints/new`, `/complaints/[id]`, `/complaints/[id]/assessment`) wrapped with responsive `PortalLayout`.
+  - Added comprehensive automated integration suite `TestComplaintWorkflowAndIdentifiers` in `backend/server_test.go` covering 10 concurrent sequence generations, public submission, 2FA status tracking, authorized assessment, and 409 Conflict rejection.
+- **Files Changed**:
+  - `backend/internal/models/complaint.go`
+  - `backend/internal/repository/complaint_repository.go`
+  - `backend/internal/service/sequence_service.go`
+  - `backend/internal/service/complaint_service.go`
+  - `backend/internal/handler/complaint_handler.go`
+  - `backend/internal/handler/router.go`
+  - `backend/cmd/server/main.go`
+  - `backend/server_test.go`
+  - `frontend/src/lib/types.ts`
+  - `frontend/src/lib/api.ts`
+  - `frontend/src/components/layout/PortalLayout.tsx`
+  - `frontend/src/app/public/complaints/new/page.tsx`
+  - `frontend/src/app/public/complaints/track/page.tsx`
+  - `frontend/src/app/complaints/page.tsx`
+  - `frontend/src/app/complaints/new/page.tsx`
+  - `frontend/src/app/complaints/[id]/page.tsx`
+  - `frontend/src/app/complaints/[id]/assessment/page.tsx`
+- **Tests Run & Passed**:
+  - `go test -v ./...`: 8/8 test suites passed (100%).
+  - `npm run lint`: 0 errors.
+  - `npm run build`: Next.js production build succeeded (10 routes compiled).
+- **Decisions**:
+  - All public complaints generate formal tracking codes server-side before persisting the record.
+  - Atomic sequences utilize MySQL `LAST_INSERT_ID(current_val + 1)` on duplicate key update, eliminating race conditions under concurrency.
+  - State machine enforces mandatory formal justification reasons for all transitions and logs full audit trail.
+
+

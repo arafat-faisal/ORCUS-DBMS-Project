@@ -7,7 +7,7 @@
 [CmdletBinding()]
 param (
     [int]$BackendPort = 5050,
-    [int]$FrontendPort = 9874,
+    [int]$FrontendPort = 7700,
     [switch]$NoBrowser
 )
 
@@ -98,15 +98,18 @@ function Start-FrontendServer([int]$Port = 9874) {
         return $true
     }
 
-    $pythonInstalled = $null -ne (Get-Command python -ErrorAction SilentlyContinue)
-    if ($pythonInstalled) {
+    if (Test-Path "frontend/package.json") {
+        Write-Host "  Launching Next.js App Router server on port $Port..." -ForegroundColor Gray
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title ORCUS Next.js Frontend (Port $Port) && cd frontend && npm run dev -- -p $Port"
+        Start-Sleep -Seconds 1
+        Write-Host "  [OK] Next.js Frontend Server started at http://localhost:$Port" -ForegroundColor Green
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
         Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title ORCUS Frontend (Port $Port) && cd frontend && python -m http.server $Port"
         Start-Sleep -Seconds 1
         Write-Host "  [OK] Frontend Server started at http://localhost:$Port" -ForegroundColor Green
     } else {
-        Write-Host "  [!] Python not available; falling back to opening index.html directly..." -ForegroundColor Yellow
-        $indexFile = Resolve-Path "test-frontend/index.html"
-        Start-Process $indexFile
+        Write-Host "  [!] Opening index.html directly in browser..." -ForegroundColor Yellow
+        Start-Process (Resolve-Path "frontend/index.html")
     }
 
     Write-Host ""

@@ -1,7 +1,6 @@
 // ============================================================================
-// [ORIGIN: Md. Arafat Hossain Faisal (241400060) - Module 1: Organization & Access Control]
 // File: backend/internal/service/auth_service.go
-// Purpose: Authentication business logic, password verification (bcrypt), and JWT token signing.
+// Purpose: Secure authentication business logic with pure bcrypt verification and rate-limiting.
 // ============================================================================
 
 package service
@@ -10,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"orcus-backend/internal/models"
@@ -22,33 +22,47 @@ import (
 type AuthService struct {
 	authRepo  *repository.AuthRepository
 	jwtSecret string
+	throttler *LoginThrottler
 }
 
 func NewAuthService(authRepo *repository.AuthRepository, jwtSecret string) *AuthService {
 	return &AuthService{
 		authRepo:  authRepo,
 		jwtSecret: jwtSecret,
+		throttler: NewLoginThrottler(5, 15*time.Minute),
 	}
 }
 
-// Login verifies user password and returns JWT token + user profile
+// Login verifies user credentials purely via bcrypt and issues JWT
 func (s *AuthService) Login(ctx context.Context, username, password string) (*models.LoginResponse, error) {
+	// 1. Check rate-limiting throttle
+	if s.throttler.IsBlocked(username) {
+		log.Printf("[SECURITY WARNING] Rate-limit blocked login attempt for username '%s'", username)
+		return nil, errors.New("too many failed login attempts. Please wait 15 minutes before retrying")
+	}
+
+	// 2. Fetch user by username
 	user, err := s.authRepo.GetUserByUsername(ctx, username)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
+		s.throttler.RecordFailure(username)
+		log.Printf("[SECURITY EVENT] Failed login attempt: Unknown username '%s'", username)
 		return nil, errors.New("invalid username or password")
 	}
 
-	// Verify bcrypt hash
+	// 3. Authenticate purely via bcrypt hash comparison (NO fallback / NO backdoor)
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		// Fallback for demo accounts if sample hashes are used
-		if password != "password123" && password != "admin123" && password != "secret" {
-			return nil, errors.New("invalid username or password")
-		}
+		s.throttler.RecordFailure(username)
+		log.Printf("[SECURITY EVENT] Failed login attempt: Incorrect password for user '%s'", username)
+		return nil, errors.New("invalid username or password")
 	}
 
+	// Reset failure count upon success
+	s.throttler.Reset(username)
+
+	// 4. Retrieve complete profile
 	profile, err := s.authRepo.GetUserProfile(ctx, user.UserID)
 	if err != nil {
 		return nil, err
@@ -57,10 +71,13 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*mo
 		return nil, errors.New("user profile not found")
 	}
 
+	// 5. Generate secure JWT token
 	token, err := s.GenerateJWT(profile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate JWT token: %w", err)
+		return nil, fmt.Errorf("failed to generate authorization token: %w", err)
 	}
+
+	log.Printf("[SECURITY EVENT] User '%s' (User ID: %d, Officer ID: %v) authenticated successfully", profile.Username, profile.UserID, profile.OfficerID)
 
 	return &models.LoginResponse{
 		Token: token,
@@ -108,6 +125,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, req *models.RegisterUser
 		return nil, err
 	}
 
+	log.Printf("[SECURITY EVENT] New user '%s' (ID: %d) registered with roles %v", req.Username, userID, req.RoleIDs)
 	return s.authRepo.GetUserProfile(ctx, userID)
 }
 

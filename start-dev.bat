@@ -8,7 +8,7 @@ REM ============================================================================
 setlocal enabledelayedexpansion
 
 set BACKEND_PORT=5050
-set FRONTEND_PORT=9874
+set FRONTEND_PORT=7700
 
 call :show_banner
 call :check_prereqs
@@ -138,13 +138,19 @@ exit /b 0
 set T_PORT=%~1
 if "%T_PORT%"=="" set T_PORT=9874
 echo [3/3] Starting Frontend Server (Port %T_PORT%)...
-where /q python
-if errorlevel 1 (
-    echo   [!] Python not installed. Opening index.html directly in browser...
-    start frontend\index.html
-) else (
-    start "ORCUS Frontend Server (Port %T_PORT%)" cmd /k "cd frontend && python -m http.server %T_PORT%"
-    echo   [OK] Frontend Server launching at http://localhost:%T_PORT%
+
+if exist "frontend\package.json" (
+    echo   Starting Next.js App Router server on port %T_PORT%...
+    start "ORCUS Next.js Frontend (Port %T_PORT%)" cmd /k "cd frontend && npm run dev -- -p %T_PORT%"
+    echo   [OK] Next.js Frontend Server launching at http://localhost:%T_PORT%
+) else if exist "frontend\index.html" (
+    where /q python
+    if errorlevel 1 (
+        start frontend\index.html
+    ) else (
+        start "ORCUS Frontend Server (Port %T_PORT%)" cmd /k "cd frontend && python -m http.server %T_PORT%"
+        echo   [OK] Frontend Server launching at http://localhost:%T_PORT%
+    )
 )
 echo.
 exit /b 0

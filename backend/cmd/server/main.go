@@ -49,37 +49,51 @@ func main() {
 	partRepo := repository.NewParticipantRepository(db.DB)
 	evidRepo := repository.NewEvidenceRepository(db.DB)
 	analytRepo := repository.NewAnalyticsRepository(db.DB)
+	auditRepo := repository.NewAuditRepository(db.DB)
+	geoRepo := repository.NewGeographyRepository(db.DB)
+	complaintRepo := repository.NewComplaintRepository(db.DB)
 
 	// 4. Initialize Services
+	seqService := service.NewSequenceService(db.DB)
 	authService := service.NewAuthService(authRepo, cfg.JWTSecret)
 	orgService := service.NewOrganizationService(orgRepo)
-	intakeService := service.NewIntakeService(intakeRepo)
+	intakeService := service.NewIntakeService(intakeRepo, seqService)
 	caseService := service.NewCaseService(caseRepo, partRepo, evidRepo)
 	partService := service.NewParticipantService(partRepo)
 	evidService := service.NewEvidenceService(evidRepo)
 	analytService := service.NewAnalyticsService(analytRepo)
+	auditService := service.NewAuditService(auditRepo)
+	geoService := service.NewGeographyService(geoRepo)
+	complaintService := service.NewComplaintService(complaintRepo, intakeRepo, seqService, auditService)
 
 	// 5. Initialize Handlers
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, auditService, cfg.CookieSecure)
 	orgHandler := handler.NewOrganizationHandler(orgService)
-	intakeHandler := handler.NewIntakeHandler(intakeService)
+	intakeHandler := handler.NewIntakeHandler(intakeService, complaintService)
 	caseHandler := handler.NewCaseHandler(caseService)
 	partHandler := handler.NewParticipantHandler(partService)
 	locHandler := handler.NewLocationHandler(partService)
 	evidHandler := handler.NewEvidenceHandler(evidService)
 	analytHandler := handler.NewAnalyticsHandler(analytService)
+	auditHandler := handler.NewAuditHandler(auditService)
+	geoHandler := handler.NewGeographyHandler(geoService)
+	complaintHandler := handler.NewComplaintHandler(complaintService, auditService)
 
 	// 6. Setup Master Router
 	router := handler.SetupMasterRouter(&handler.RouterParams{
-		JWTSecret:     cfg.JWTSecret,
-		AuthHandler:   authHandler,
-		OrgHandler:    orgHandler,
-		IntakeHandler: intakeHandler,
-		CaseHandler:   caseHandler,
-		PartHandler:   partHandler,
-		LocHandler:    locHandler,
-		EvidHandler:   evidHandler,
-		AnalytHandler: analytHandler,
+		JWTSecret:        cfg.JWTSecret,
+		AllowedOrigins:   cfg.CORSAllowedOrigins,
+		AuthHandler:      authHandler,
+		OrgHandler:       orgHandler,
+		IntakeHandler:    intakeHandler,
+		CaseHandler:      caseHandler,
+		PartHandler:      partHandler,
+		LocHandler:       locHandler,
+		EvidHandler:      evidHandler,
+		AnalytHandler:    analytHandler,
+		AuditHandler:     auditHandler,
+		GeoHandler:       geoHandler,
+		ComplaintHandler: complaintHandler,
 	})
 
 	log.Printf("ORCUS API Server listening on http://localhost:%s/api/v1", cfg.Port)

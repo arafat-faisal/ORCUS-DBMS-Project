@@ -1,7 +1,6 @@
 // ============================================================================
-// [ORIGIN: Md. Arafat Hossain Faisal (241400060) - Module 1: Organization & Access Control]
 // File: backend/internal/middleware/auth.go
-// Purpose: JWT authentication middleware extracting token claims and injecting into Gin context.
+// Purpose: JWT authentication middleware extracting tokens from HTTP-only cookies or Bearer headers.
 // ============================================================================
 
 package middleware
@@ -18,38 +17,48 @@ import (
 )
 
 const (
-	ContextUserID   = "user_id"
-	ContextUsername = "username"
-	ContextRoles    = "roles"
+	ContextUserID    = "user_id"
+	ContextUsername  = "username"
+	ContextRoles     = "roles"
+	ContextBranchID  = "branch_id"
+	ContextRequestID = "request_id"
+	AuthCookieName   = "orcus_auth_token"
 )
 
-// JWTAuthMiddleware verifies Bearer tokens and extracts user claims into Gin context
+// JWTAuthMiddleware verifies tokens from HTTP-only cookie or Bearer Authorization header
 func JWTAuthMiddleware(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		var tokenStr string
+
+		// 1. Try to read from HTTP-only cookie first (Primary secure browser storage)
+		if cookieVal, err := c.Cookie(AuthCookieName); err == nil && cookieVal != "" {
+			tokenStr = cookieVal
+		}
+
+		// 2. Fallback to Authorization Bearer header (For API clients and automated tests)
+		if tokenStr == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.SplitN(authHeader, " ", 2)
+				if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+					tokenStr = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+
+		if tokenStr == "" {
 			c.JSON(http.StatusUnauthorized, models.StandardResponse{
 				Success: false,
-				Error:   "Authorization header is required (Format: 'Bearer <token>')",
+				Error:   "Authentication required. No valid session cookie or Authorization header found.",
 			})
 			c.Abort()
 			return
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if !(len(parts) == 2 && strings.ToLower(parts[0]) == "bearer") {
-			c.JSON(http.StatusUnauthorized, models.StandardResponse{
-				Success: false,
-				Error:   "Invalid authorization header format. Expected 'Bearer <token>'",
-			})
-			c.Abort()
-			return
-		}
-
-		tokenStr := parts[1]
+		// 3. Parse and validate HMAC-SHA256 JWT
 		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+				return nil, fmt.Errorf("unexpected signing algorithm: %v", token.Header["alg"])
 			}
 			return []byte(jwtSecret), nil
 		})
@@ -57,7 +66,7 @@ func JWTAuthMiddleware(jwtSecret string) gin.HandlerFunc {
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, models.StandardResponse{
 				Success: false,
-				Error:   "Invalid or expired authorization token",
+				Error:   "Invalid or expired authentication session. Please sign in again.",
 			})
 			c.Abort()
 			return

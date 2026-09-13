@@ -6,12 +6,21 @@
 
 package models
 
+type PaginationInfo struct {
+	Page       int `json:"page"`
+	PageSize   int `json:"page_size"`
+	Total      int `json:"total"`
+	TotalPages int `json:"total_pages"`
+}
+
 type StandardResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-	Count   *int        `json:"count,omitempty"`
+	Success    bool            `json:"success"`
+	Message    string          `json:"message,omitempty"`
+	Data       interface{}     `json:"data,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Count      *int            `json:"count,omitempty"`
+	Pagination *PaginationInfo `json:"pagination,omitempty"`
+	RequestID  string          `json:"request_id,omitempty"`
 }
 
 type DashboardOverview struct {

@@ -3,3 +3,12 @@ prep/
 .prep/
 *.exe
 .env
+*.env
+backend/.env
+frontend/.env.local
+frontend/.env*.local
+*.sql.bak
+node_modules/
+dist/
+.next/
+

@@ -15,9 +15,11 @@
 package handler
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"orcus-backend/internal/auth"
 	"orcus-backend/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +27,7 @@ import (
 
 type RouterParams struct {
 	JWTSecret      string
+	AllowedOrigins []string
 	AuthHandler    *AuthHandler
 	OrgHandler     *OrganizationHandler
 	IntakeHandler  *IntakeHandler
@@ -33,11 +36,14 @@ type RouterParams struct {
 	LocHandler     *LocationHandler
 	EvidHandler    *EvidenceHandler
 	AnalytHandler  *AnalyticsHandler
+	AuditHandler     *AuditHandler
+	GeoHandler       *GeographyHandler
+	ComplaintHandler *ComplaintHandler
 }
 
 func SetupMasterRouter(p *RouterParams) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.LoggerMiddleware(), middleware.CORSMiddleware())
+	r.Use(gin.Recovery(), middleware.LoggerMiddleware(), middleware.CORSMiddleware(p.AllowedOrigins))
 
 	// Locate and serve static testing frontend dashboard safely
 	staticDir := "./test-frontend"
@@ -63,88 +69,129 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 		// ====================================================================
 		// Public Endpoints
 		// ====================================================================
+		api.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "orcus-backend"})
+		})
 		api.POST("/auth/login", p.AuthHandler.Login)
+		api.POST("/auth/logout", p.AuthHandler.Logout)
+
+		// Bangladesh Geographic Hierarchy
+		api.GET("/geo/divisions", p.GeoHandler.ListDivisions)
+		api.GET("/geo/districts", p.GeoHandler.ListDistricts)
+		api.GET("/geo/upazilas", p.GeoHandler.ListUpazilas)
+		api.GET("/geo/thanas", p.GeoHandler.ListThanas)
+
+		// Public Citizen Complaint Intake & Tracking
+		api.GET("/complaint-categories", p.ComplaintHandler.GetCategories)
+		api.POST("/public/complaints", p.ComplaintHandler.PublicSubmitComplaint)
+		api.GET("/public/complaints/track", p.ComplaintHandler.PublicTrackComplaint)
 
 		// ====================================================================
-		// Protected Endpoints (Require valid JWT)
+		// Protected Endpoints (Require valid session cookie or Bearer token)
 		// ====================================================================
 		protected := api.Group("")
 		protected.Use(middleware.JWTAuthMiddleware(p.JWTSecret))
 		{
-			// ----------------------------------------------------------------
-			// Module 1: Organization & Access Control (Faisal)
-			// ----------------------------------------------------------------
+			// Session & Access
 			protected.GET("/auth/me", p.AuthHandler.GetMe)
-			protected.POST("/auth/register", middleware.RequireRoles("Administrator"), p.AuthHandler.RegisterUser)
+			protected.POST("/auth/register", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.RegisterUser)
 			protected.GET("/roles", p.AuthHandler.ListRoles)
+			protected.GET("/admin/audit-logs", middleware.RequirePermission(auth.PermViewAuditLogs), p.AuditHandler.ListAuditLogs)
 
-			protected.GET("/branches", p.OrgHandler.ListBranches)
-			protected.GET("/branches/:id", p.OrgHandler.GetBranch)
-			protected.POST("/branches", middleware.RequireRoles("Administrator"), p.OrgHandler.CreateBranch)
+			// Internal Operational Group (Forbidden to Public Complainants)
+			ops := protected.Group("")
+			ops.Use(middleware.RequireNotRoles("Public Complainant"))
+			{
+				ops.GET("/branches", p.OrgHandler.ListBranches)
+				ops.GET("/branches/:id", p.OrgHandler.GetBranch)
+				ops.POST("/branches", middleware.RequirePermission(auth.PermManageSystem), p.OrgHandler.CreateBranch)
 
-			protected.GET("/officers", p.OrgHandler.ListOfficers)
-			protected.GET("/officers/caseload", p.OrgHandler.GetOfficerCaseload)
-			protected.GET("/officers/:id", p.OrgHandler.GetOfficer)
-			protected.POST("/officers", middleware.RequireRoles("Administrator"), p.OrgHandler.CreateOfficer)
+				ops.GET("/officers", p.OrgHandler.ListOfficers)
+				ops.GET("/officers/caseload", p.OrgHandler.GetOfficerCaseload)
+				ops.GET("/officers/:id", p.OrgHandler.GetOfficer)
+				ops.POST("/officers", middleware.RequirePermission(auth.PermManageUsers), p.OrgHandler.CreateOfficer)
 
-			// ----------------------------------------------------------------
-			// Module 2: Investigation Intake & Cases (Shakil)
-			// ----------------------------------------------------------------
-			protected.GET("/complainants", p.IntakeHandler.ListComplainants)
-			protected.GET("/complainants/:id", p.IntakeHandler.GetComplainant)
-			protected.POST("/complainants", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.IntakeHandler.CreateComplainant)
+				// ----------------------------------------------------------------
+				// Complaints Intake & Assessment Workflow
+				// ----------------------------------------------------------------
+				ops.GET("/complaints", p.ComplaintHandler.ListComplaints)
+				ops.POST("/complaints", middleware.RequirePermission(auth.PermIntakeComplaint), p.ComplaintHandler.CreateOfficerComplaint)
+				ops.GET("/complaints/:id", p.ComplaintHandler.GetComplaint)
+				ops.POST("/complaints/:id/assess", middleware.RequirePermission(auth.PermAssessComplaint), p.ComplaintHandler.AssessComplaint)
+				ops.POST("/complaints/:id/transfer", middleware.RequireAnyPermission(auth.PermAssessComplaint, auth.PermApproveIntake), p.ComplaintHandler.TransferComplaint)
+				ops.GET("/complaints/:id/history", p.ComplaintHandler.GetStatusHistory)
+				ops.GET("/complaints/:id/transfers", p.ComplaintHandler.GetTransferHistory)
 
-			protected.GET("/gds", p.IntakeHandler.ListGDs)
-			protected.GET("/gds/:id", p.IntakeHandler.GetGD)
-			protected.POST("/gds", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.IntakeHandler.CreateGD)
+				// ----------------------------------------------------------------
+				// Module 2: Investigation Intake & Cases
+				// ----------------------------------------------------------------
+				ops.GET("/complainants", p.IntakeHandler.ListComplainants)
+				ops.GET("/complainants/:id", p.IntakeHandler.GetComplainant)
+				ops.POST("/complainants", middleware.RequireAnyPermission(auth.PermIntakeComplaint, auth.PermInvestigateCase), p.IntakeHandler.CreateComplainant)
 
-			protected.GET("/firs", p.IntakeHandler.ListFIRs)
-			protected.GET("/firs/:id", p.IntakeHandler.GetFIR)
-			protected.POST("/firs", middleware.RequireRoles("Lead Investigator", "Administrator"), p.IntakeHandler.CreateFIR)
-			protected.GET("/legal-sections", p.IntakeHandler.ListLegalSections)
+				// Complaint Conversions
+				ops.POST("/complaints/:id/convert-gd", middleware.RequireAnyPermission(auth.PermIntakeComplaint, auth.PermApproveIntake), p.IntakeHandler.ConvertComplaintToGD)
+				ops.POST("/complaints/:id/convert-fir", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.ConvertComplaintToFIR)
 
-			protected.GET("/cases", p.CaseHandler.SearchCases)
-			protected.GET("/cases/:id", p.CaseHandler.GetCaseDossier)
-			protected.POST("/cases", middleware.RequireRoles("Lead Investigator", "Administrator"), p.CaseHandler.OpenCase)
-			protected.PUT("/cases/:id/status", middleware.RequireRoles("Lead Investigator", "Administrator"), p.CaseHandler.UpdateCaseStatus)
-			protected.GET("/cases/:id/history", p.CaseHandler.GetCaseHistory)
+				// General Diary (GD)
+				ops.GET("/gds", p.IntakeHandler.ListGDs)
+				ops.GET("/gds/:id", p.IntakeHandler.GetGD)
+				ops.GET("/gds/:id/history", p.IntakeHandler.GetGDHistory)
+				ops.POST("/gds", middleware.RequireAnyPermission(auth.PermIntakeComplaint, auth.PermInvestigateCase), p.IntakeHandler.CreateGD)
+				ops.POST("/gds/:id/status", middleware.RequireAnyPermission(auth.PermApproveIntake, auth.PermSuperviseCase), p.IntakeHandler.UpdateGDStatus)
+				ops.POST("/gds/:id/link-fir", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.LinkGDToFIR)
 
-			// ----------------------------------------------------------------
-			// Module 3: Participants, Location & Evidence (Liza)
-			// ----------------------------------------------------------------
-			protected.GET("/suspects", p.PartHandler.ListSuspects)
-			protected.GET("/suspects/:id", p.PartHandler.GetSuspect)
-			protected.GET("/suspects/:id/dossier", p.PartHandler.GetSuspectDossier)
-			protected.POST("/suspects", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.CreateSuspect)
+				// FIR & Legal Sections
+				ops.GET("/firs", p.IntakeHandler.ListFIRs)
+				ops.GET("/firs/:id", p.IntakeHandler.GetFIR)
+				ops.GET("/firs/:id/history", p.IntakeHandler.GetFIRHistory)
+				ops.POST("/firs", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.CreateFIR)
+				ops.POST("/firs/:id/status", middleware.RequireAnyPermission(auth.PermApproveIntake, auth.PermSuperviseCase), p.IntakeHandler.UpdateFIRStatus)
+				ops.GET("/legal-sections", p.IntakeHandler.ListLegalSections)
 
-			protected.GET("/victims", p.PartHandler.ListVictims)
-			protected.POST("/victims", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.CreateVictim)
+				ops.GET("/cases", p.CaseHandler.SearchCases)
+				ops.GET("/cases/:id", p.CaseHandler.GetCaseDossier)
+				ops.POST("/cases", middleware.RequirePermission(auth.PermManageCases), p.CaseHandler.OpenCase)
+				ops.PUT("/cases/:id/status", middleware.RequireAnyPermission(auth.PermManageCases, auth.PermSuperviseCase), p.CaseHandler.UpdateCaseStatus)
+				ops.GET("/cases/:id/history", p.CaseHandler.GetCaseHistory)
 
-			protected.GET("/witnesses", p.PartHandler.ListWitnesses)
-			protected.POST("/witnesses", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.CreateWitness)
+				// ----------------------------------------------------------------
+				// Module 3: Participants, Location & Evidence
+				// ----------------------------------------------------------------
+				ops.GET("/suspects", p.PartHandler.ListSuspects)
+				ops.GET("/suspects/:id", p.PartHandler.GetSuspect)
+				ops.GET("/suspects/:id/dossier", p.PartHandler.GetSuspectDossier)
+				ops.POST("/suspects", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.CreateSuspect)
 
-			// Case-Participant Linking
-			protected.POST("/cases/:id/suspects", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.LinkSuspectToCase)
-			protected.POST("/cases/:id/victims", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.LinkVictimToCase)
-			protected.POST("/cases/:id/witnesses", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.PartHandler.LinkWitnessToCase)
-			protected.POST("/cases/:id/locations", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.LocHandler.LinkLocationToCase)
+				ops.GET("/victims", p.PartHandler.ListVictims)
+				ops.POST("/victims", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.CreateVictim)
 
-			// Locations
-			protected.GET("/locations", p.LocHandler.ListLocations)
-			protected.POST("/locations", middleware.RequireRoles("Field Detective", "Lead Investigator", "Administrator"), p.LocHandler.CreateLocation)
+				ops.GET("/witnesses", p.PartHandler.ListWitnesses)
+				ops.POST("/witnesses", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.CreateWitness)
 
-			// Evidence & Chain of Custody
-			protected.GET("/evidence", p.EvidHandler.ListEvidence)
-			protected.GET("/evidence/:id", p.EvidHandler.GetEvidence)
-			protected.POST("/evidence", middleware.RequireRoles("Forensic Specialist", "Lead Investigator", "Administrator"), p.EvidHandler.CreateEvidence)
-			protected.PUT("/evidence/:id/status", middleware.RequireRoles("Forensic Specialist", "Lead Investigator", "Administrator"), p.EvidHandler.UpdateEvidenceStatus)
-			protected.GET("/evidence/:id/chain", p.EvidHandler.GetEvidenceChainOfCustody)
+				// Case-Participant Linking
+				ops.POST("/cases/:id/suspects", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.LinkSuspectToCase)
+				ops.POST("/cases/:id/victims", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.LinkVictimToCase)
+				ops.POST("/cases/:id/witnesses", middleware.RequirePermission(auth.PermInvestigateCase), p.PartHandler.LinkWitnessToCase)
+				ops.POST("/cases/:id/locations", middleware.RequirePermission(auth.PermInvestigateCase), p.LocHandler.LinkLocationToCase)
 
-			// ----------------------------------------------------------------
-			// Analytics & Views (Unified Dashboard)
-			// ----------------------------------------------------------------
-			protected.GET("/analytics/overview", p.AnalytHandler.GetDashboardOverview)
-			protected.GET("/analytics/pipeline", p.AnalytHandler.GetCasePipeline)
+				// Locations
+				ops.GET("/locations", p.LocHandler.ListLocations)
+				ops.POST("/locations", middleware.RequirePermission(auth.PermInvestigateCase), p.LocHandler.CreateLocation)
+
+				// Evidence & Chain of Custody
+				ops.GET("/evidence", p.EvidHandler.ListEvidence)
+				ops.GET("/evidence/:id", p.EvidHandler.GetEvidence)
+				ops.POST("/evidence", middleware.RequirePermission(auth.PermManageEvidence), p.EvidHandler.CreateEvidence)
+				ops.PUT("/evidence/:id/status", middleware.RequirePermission(auth.PermManageEvidence), p.EvidHandler.UpdateEvidenceStatus)
+				ops.GET("/evidence/:id/chain", p.EvidHandler.GetEvidenceChainOfCustody)
+
+				// ----------------------------------------------------------------
+				// Analytics & Views (Unified Dashboard)
+				// ----------------------------------------------------------------
+				ops.GET("/analytics/overview", p.AnalytHandler.GetDashboardOverview)
+				ops.GET("/analytics/pipeline", p.AnalytHandler.GetCasePipeline)
+			}
 		}
 	}
 

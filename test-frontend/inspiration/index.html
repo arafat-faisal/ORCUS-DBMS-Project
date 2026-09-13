@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inspiration - Interactive Home & Open Screen</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700;800&family=Lato:ital,wght@0,300;0,400;0,700;1,300&family=Montserrat:wght@200;300;400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Scripts: jQuery & WebGL Water Ripples -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.ripples/0.5.3/jquery.ripples.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        :root {
+            --bg-color: #060709;
+            --text-primary: #e6e8eb;
+            --text-secondary: #7e8691;
+            --text-dim: #383e47;
+            --accent-glow: rgba(255, 255, 255, 0.85);
+            --accent-cyan: #00d2ff;
+            --accent-blue: #3a7bd5;
+            --border-dark: #1d2127;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Lato', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ==========================================================================
+           1. INITIAL PERCENTAGE LOADING SCREEN
+           ========================================================================== */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, #0d0f14 0%, #030406 100%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1), visibility 1s ease;
+        }
+
+        #loading-screen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .loader-brand {
+            text-align: center;
+            letter-spacing: 0.85rem;
+            font-family: 'Cinzel', serif;
+            font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+            font-weight: 600;
+            color: #d1d5db;
+            text-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+            margin-bottom: 24px;
+            transform: translateX(0.42rem); /* counter letter-spacing offset */
+        }
+
+        .loader-subtitle {
+            font-family: 'Montserrat', sans-serif;
+            font-size: clamp(0.7rem, 1vw, 0.85rem);
+            font-weight: 600;
+            color: #4b5563;
+            letter-spacing: 0.45rem;
+            margin-top: 8px;
+            text-transform: uppercase;
+        }
+
+        .loader-bar-container {
+            width: clamp(200px, 25vw, 320px);
+            height: 2px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            margin: 16px 0;
+        }
+
+        .loader-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+            box-shadow: 0 0 12px #00d2ff;
+            transition: width 0.05s ease-out;
+        }
+
+        .loader-percentage {
+            font-family: 'Montserrat', monospace;
+            font-size: 0.9rem;
+            color: #6b7280;
+            letter-spacing: 0.2rem;
+            font-weight: 300;
+        }
+
+        /* ==========================================================================
+           2. INTERACTIVE START / "CLICK TO OPEN" WATER RIPPLE SCREEN
+           ========================================================================== */
+        #loading-screen-start {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, #0d1117 0%, #030406 100%);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 1.2s ease, transform 1s ease;
+        }
+
+        #loading-screen-start.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #loading-screen-start.fade-out-start {
+            opacity: 0;
+            transform: scale(1.08);
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .start-brand-container {
+            text-align: center;
+            pointer-events: none;
+            margin-bottom: 40px;
+        }
+
+        .start-title {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(1.8rem, 3.8vw, 3.4rem);
+            font-weight: 700;
+            color: #f3f4f6;
+            letter-spacing: 0.9rem;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
+            transform: translateX(0.45rem);
+        }
+
+        .start-desc {
+            font-family: 'Montserrat', sans-serif;
+            font-size: clamp(0.75rem, 1.1vw, 0.95rem);
+            font-weight: 600;
+            color: #4b5563;
+            letter-spacing: 0.5rem;
+            margin-top: 14px;
+            text-transform: uppercase;
+        }
+
+        .start-button {
+            position: relative;
+            background: rgba(15, 18, 24, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: #d1d5db;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            padding: 16px 44px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: clamp(0.85rem, 1.2vw, 1.05rem);
+            font-weight: 500;
+            letter-spacing: 0.35rem;
+            text-transform: uppercase;
+            border-radius: 40px;
+            cursor: pointer;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.03);
+            z-index: 10;
+        }
+
+        .start-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            transition: left 0.6s ease;
+        }
+
+        .start-button:hover {
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(26, 32, 44, 0.8);
+            box-shadow: 0 0 35px rgba(255, 255, 255, 0.25), 0 0 15px rgba(0, 210, 255, 0.3);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        .start-button:hover::before {
+            left: 100%;
+        }
+
+        .start-button:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        .ripple-hint {
+            position: absolute;
+            bottom: 35px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.25);
+            letter-spacing: 0.25rem;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .ripple-hint i {
+            font-size: 0.85rem;
+            animation: pulseHint 2s infinite ease-in-out;
+        }
+
+        @keyframes pulseHint {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.2); }
+        }
+
+        /* ==========================================================================
+           3. MAIN HOME PAGE SECTION
+           ========================================================================== */
+        #section-home {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            background: radial-gradient(circle at 50% 40%, #0d1219 0%, #050608 100%);
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 1.5s ease-in;
+        }
+
+        #section-home.active {
+            opacity: 1;
+        }
+
+        /* Header Navigation */
+        header.nav-header {
+            width: 100%;
+            padding: 30px 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+        }
+
+        .nav-brand {
+            font-family: 'Cinzel', serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 0.35rem;
+            color: #d1d5db;
+            text-decoration: none;
+            transition: color 0.3s ease, text-shadow 0.3s ease;
+        }
+
+        .nav-brand:hover {
+            color: #fff;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 36px;
+            list-style: none;
+        }
+
+        .nav-item a {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.82rem;
+            color: #9ca3af;
+            letter-spacing: 0.2rem;
+            text-decoration: none;
+            text-transform: uppercase;
+            position: relative;
+            padding: 6px 0;
+            transition: color 0.3s ease;
+        }
+
+        .nav-item a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 1px;
+            background: #00d2ff;
+            box-shadow: 0 0 8px #00d2ff;
+            transition: width 0.3s ease;
+        }
+
+        .nav-item a:hover {
+            color: #fff;
+        }
+
+        .nav-item a:hover::after, .nav-item.active a::after {
+            width: 100%;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .sound-toggle-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #9ca3af;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.15rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .sound-toggle-btn:hover {
+            border-color: rgba(255, 255, 255, 0.4);
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .sound-toggle-btn.playing {
+            border-color: #00d2ff;
+            color: #00d2ff;
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.3);
+        }
+
+        /* Sound Bars Animation */
+        .equalizer {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 12px;
+        }
+
+        .eq-bar {
+            width: 2px;
+            height: 4px;
+            background: currentColor;
+            border-radius: 1px;
+        }
+
+        .sound-toggle-btn.playing .eq-bar:nth-child(1) { animation: eqAnim 0.7s infinite alternate ease-in-out; }
+        .sound-toggle-btn.playing .eq-bar:nth-child(2) { animation: eqAnim 0.5s 0.2s infinite alternate ease-in-out; }
+        .sound-toggle-btn.playing .eq-bar:nth-child(3) { animation: eqAnim 0.9s 0.1s infinite alternate ease-in-out; }
+
+        @keyframes eqAnim {
+            0% { height: 3px; }
+            100% { height: 12px; }
+        }
+
+        /* Hero Center Content */
+        .home-center {
+            text-align: center;
+            z-index: 10;
+            padding: 0 20px;
+            margin-top: -2vh;
+        }
+
+        .hero-name-container {
+            cursor: pointer;
+            display: inline-block;
+            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .hero-name-container:hover {
+            transform: scale(1.02);
+        }
+
+        .hero-title {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(2.4rem, 6.2vw, 5.8rem);
+            font-weight: 700;
+            letter-spacing: clamp(0.4rem, 1.2vw, 1.2rem);
+            color: #d8dce3;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+            transition: all 0.4s ease;
+        }
+
+        .hero-name-container:hover .hero-title {
+            color: #ffffff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.9), 
+                         0 0 50px rgba(0, 210, 255, 0.5), 
+                         0 0 90px rgba(58, 123, 213, 0.3);
+        }
+
+        /* Typing Subtitle */
+        .typed-wrapper {
+            margin-top: 22px;
+            min-height: 38px;
+        }
+
+        .typed-text {
+            font-family: 'Montserrat', sans-serif;
+            font-size: clamp(0.9rem, 1.8vw, 1.4rem);
+            font-weight: 300;
+            color: #93c5fd;
+            letter-spacing: 0.55rem;
+            text-shadow: 0 0 15px rgba(147, 197, 253, 0.5);
+            text-transform: uppercase;
+        }
+
+        .typed-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background: #00d2ff;
+            vertical-align: middle;
+            margin-left: 6px;
+            animation: blink 0.9s infinite;
+            box-shadow: 0 0 10px #00d2ff;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Action Button */
+        .action-button-container {
+            margin-top: 45px;
+        }
+
+        .cta-btn {
+            background: transparent;
+            color: #c2c7d0;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 14px 40px;
+            border-radius: 50px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.85rem;
+            letter-spacing: 0.3rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.35s ease;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .cta-btn:hover {
+            background-color: #ffffff;
+            color: #08090c;
+            border-color: #ffffff;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.7), 0 0 50px rgba(0, 210, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* Mouse Scroll Down Indicator */
+        .footer-scroll-container {
+            margin-bottom: 35px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .scroll-text {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.3);
+            letter-spacing: 0.3rem;
+            text-transform: uppercase;
+        }
+
+        .mouse-icon {
+            width: 24px;
+            height: 38px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 14px;
+            position: relative;
+        }
+
+        .mouse-wheel {
+            width: 4px;
+            height: 8px;
+            background: #00d2ff;
+            border-radius: 2px;
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 8px #00d2ff;
+            animation: scrollWheel 2s infinite ease-in-out;
+        }
+
+        @keyframes scrollWheel {
+            0% { opacity: 0; transform: translate(-50%, 0); }
+            30% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-50%, 14px); }
+        }
+
+        /* Responsive Tweaks */
+        @media (max-width: 768px) {
+            header.nav-header { padding: 20px 25px; }
+            .nav-links { display: none; }
+            .hero-title { letter-spacing: 0.4rem; }
+            .start-button { padding: 14px 34px; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. LOADING SCREEN WITH DYNAMIC COUNTER (0% -> 100%) -->
+    <section id="loading-screen">
+        <div class="loader-brand">
+            GUSTAVO BATISTA
+            <div class="loader-subtitle">INNOVATIVE SYSTEM DESIGN</div>
+        </div>
+        <div class="loader-bar-container">
+            <div class="loader-progress" id="loader-progress"></div>
+        </div>
+        <div class="loader-percentage" id="percentage">0%</div>
+    </section>
+
+    <!-- 2. "CLICK TO OPEN" / START SCREEN WITH INTERACTIVE WATER RIPPLES -->
+    <section id="loading-screen-start">
+        <div class="start-brand-container">
+            <h1 class="start-title">GUSTAVO BATISTA</h1>
+            <div class="start-desc">SYSTEMS ARCHITECT &amp; DEVELOPER</div>
+        </div>
+        
+        <button class="start-button" id="start-button">
+            <span>START &bull; OPEN</span>
+        </button>
+
+        <div class="ripple-hint">
+            <i class="fa-solid fa-water"></i> Move mouse / click anywhere for water ripples
+        </div>
+    </section>
+
+    <!-- 3. FULL REVEALED HOME PAGE WITH SLEEK AESTHETICS & RIPPLES -->
+    <section id="section-home">
+        <header class="nav-header">
+            <a href="#home" class="nav-brand">GUSTAVO BATISTA</a>
+            
+            <ul class="nav-links">
+                <li class="nav-item active"><a href="#home">Home</a></li>
+                <li class="nav-item"><a href="#about">About</a></li>
+                <li class="nav-item"><a href="#services">Services</a></li>
+                <li class="nav-item"><a href="#projects">Cases &amp; Projects</a></li>
+                <li class="nav-item"><a href="#contact">Contact</a></li>
+            </ul>
+
+            <div class="header-controls">
+                <button class="sound-toggle-btn" id="sound-btn" title="Toggle Sound / Ambient Audio">
+                    <div class="equalizer">
+                        <div class="eq-bar"></div>
+                        <div class="eq-bar"></div>
+                        <div class="eq-bar"></div>
+                    </div>
+                    <span id="sound-status-text">AUDIO</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Center Hero Title with Glowing Neon Hover -->
+        <div class="home-center">
+            <div class="hero-name-container" id="hero-title-container">
+                <h1 class="hero-title">GUSTAVO BATISTA</h1>
+            </div>
+            
+            <div class="typed-wrapper">
+                <span class="typed-text" id="typed-text"></span><span class="typed-cursor"></span>
+            </div>
+
+            <div class="action-button-container">
+                <a href="#projects" class="cta-btn" id="explore-btn">
+                    EXPLORE DOSSIER &amp; CASES
+                </a>
+            </div>
+        </div>
+
+        <!-- Scroll Indicator -->
+        <div class="footer-scroll-container">
+            <div class="mouse-icon">
+                <div class="mouse-wheel"></div>
+            </div>
+            <span class="scroll-text">SCROLL TO DISCOVER</span>
+        </div>
+    </section>
+
+    <!-- Synthetic Web Audio / Background Ambient Synthesizer -->
+    <script>
+        // Web Audio Synthesizer to provide ambient atmospheric sound without requiring external files
+        let audioCtx = null;
+        let isAudioPlaying = false;
+        let ambientOsc = null;
+        let ambientGain = null;
+
+        function initSyntheticAudio() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                audioCtx = new AudioContext();
+
+                // Create gentle ambient drone
+                ambientOsc = audioCtx.createOscillator();
+                const filter = audioCtx.createBiquadFilter();
+                ambientGain = audioCtx.createGain();
+
+                ambientOsc.type = 'sine';
+                ambientOsc.frequency.setValueAtTime(55, audioCtx.currentTime); // Deep A1 note
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+
+                ambientGain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+
+                ambientOsc.connect(filter);
+                filter.connect(ambientGain);
+                ambientGain.connect(audioCtx.destination);
+                ambientOsc.start();
+            } catch (e) {
+                console.warn("Web Audio initialization skipped:", e);
+            }
+        }
+
+        function playWooshSound() {
+            if (!audioCtx) initSyntheticAudio();
+            if (!audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(35, now + 0.8);
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, now);
+                filter.frequency.exponentialRampToValueAtTime(80, now + 0.8);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.8);
+            } catch(e) {}
+        }
+
+        function toggleAmbientAudio() {
+            if (!audioCtx) initSyntheticAudio();
+            if (!audioCtx) return;
+
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const soundBtn = document.getElementById('sound-btn');
+            const soundText = document.getElementById('sound-status-text');
+
+            if (!isAudioPlaying) {
+                ambientGain.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.8);
+                soundBtn.classList.add('playing');
+                soundText.textContent = "SOUND ON";
+                isAudioPlaying = true;
+            } else {
+                ambientGain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.4);
+                soundBtn.classList.remove('playing');
+                soundText.textContent = "SOUND OFF";
+                isAudioPlaying = false;
+            }
+        }
+
+        document.getElementById('sound-btn').addEventListener('click', toggleAmbientAudio);
+    </script>
+
+    <!-- Typing Text Effect -->
+    <script>
+        const subtitles = [
+            "FULL-STACK DEVELOPER & ARCHITECT",
+            "CRIMINAL INVESTIGATION INTELLIGENCE",
+            "POLICE CASE MANAGEMENT & FORENSICS",
+            "MODERN WEB & DATABASE SYSTEMS"
+        ];
+        let currentSubtitleIdx = 0;
+        let charIdx = 0;
+        let isDeleting = false;
+        const typedElement = document.getElementById('typed-text');
+
+        function typeLoop() {
+            const currentString = subtitles[currentSubtitleIdx];
+
+            if (!isDeleting) {
+                typedElement.textContent = currentString.substring(0, charIdx + 1);
+                charIdx++;
+
+                if (charIdx === currentString.length) {
+                    isDeleting = true;
+                    setTimeout(typeLoop, 2200); // pause at complete word
+                    return;
+                }
+                setTimeout(typeLoop, 65);
+            } else {
+                typedElement.textContent = currentString.substring(0, charIdx - 1);
+                charIdx--;
+
+                if (charIdx === 0) {
+                    isDeleting = false;
+                    currentSubtitleIdx = (currentSubtitleIdx + 1) % subtitles.length;
+                    setTimeout(typeLoop, 400); // pause before next word
+                    return;
+                }
+                setTimeout(typeLoop, 35);
+            }
+        }
+    </script>
+
+    <!-- Lifecycle, Loading Progress & Start/Open Water Ripple Interaction -->
+    <script>
+        $(document).ready(function() {
+            const loadingScreen = document.getElementById('loading-screen');
+            const startScreen = document.getElementById('loading-screen-start');
+            const homeSection = document.getElementById('section-home');
+            const percentageElem = document.getElementById('percentage');
+            const progressBar = document.getElementById('loader-progress');
+            const startButton = document.getElementById('start-button');
+
+            // Initialize WebGL Water Ripples on the Start Screen
+            try {
+                if (typeof $.fn.ripples === 'function') {
+                    $('#loading-screen-start').ripples({
+                        resolution: 512,
+                        dropRadius: 20,
+                        perturbance: 0.04,
+                        interactive: true
+                    });
+
+                    $('#section-home').ripples({
+                        resolution: 512,
+                        dropRadius: 25,
+                        perturbance: 0.03,
+                        interactive: true
+                    });
+                }
+            } catch (err) {
+                console.warn("WebGL Ripples initialization skipped or unsupported:", err);
+            }
+
+            // Simulate progress counter from 0% to 100%
+            let progress = 0;
+            const progressInterval = setInterval(function() {
+                progress += Math.floor(Math.random() * 6) + 3;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(progressInterval);
+
+                    percentageElem.textContent = "100%";
+                    progressBar.style.width = "100%";
+
+                    // Transition from Loading screen to Start Screen
+                    setTimeout(function() {
+                        loadingScreen.classList.add('fade-out');
+                        startScreen.classList.add('visible');
+
+                        // Trigger a gentle ripple in the center of the start screen
+                        try {
+                            const $start = $('#loading-screen-start');
+                            const w = $start.width() / 2;
+                            const h = $start.height() / 2;
+                            $start.ripples('drop', w, h, 25, 0.08);
+                        } catch (e) {}
+                    }, 400);
+                } else {
+                    percentageElem.textContent = progress + "%";
+                    progressBar.style.width = progress + "%";
+                }
+            }, 35);
+
+            // CLICK TO OPEN / START BUTTON INTERACTION
+            startButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+
+                // Sound effect
+                playWooshSound();
+
+                // Ripple burst at button coordinates
+                try {
+                    const $start = $('#loading-screen-start');
+                    $start.ripples('drop', e.clientX, e.clientY, 35, 0.15);
+                } catch(err) {}
+
+                // Fade out start screen with smooth transition
+                startScreen.classList.add('fade-out-start');
+
+                setTimeout(function() {
+                    startScreen.style.display = 'none';
+                    homeSection.classList.add('active');
+
+                    // Start typing animation
+                    typeLoop();
+
+                    // Ripple burst in home screen
+                    try {
+                        const $home = $('#section-home');
+                        const cx = window.innerWidth / 2;
+                        const cy = window.innerHeight / 2;
+                        $home.ripples('drop', cx, cy, 30, 0.08);
+                    } catch(e) {}
+                }, 900);
+            });
+        });
+    </script>
+</body>
+</html>

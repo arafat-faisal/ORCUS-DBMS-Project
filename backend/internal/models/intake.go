@@ -29,23 +29,76 @@ type ComplainantContact struct {
 
 // GD maps to table `gd` (General Diary)
 type GD struct {
-	GDID            uint      `db:"gd_id" json:"gd_id"`
-	GDNumber        string    `db:"gd_number" json:"gd_number"`
-	GDDate          time.Time `db:"gd_date" json:"gd_date"`
-	Subject         string    `db:"subject" json:"subject"`
-	ComplainantID   uint      `db:"complainant_id" json:"complainant_id"`
-	ComplainantName *string   `db:"complainant_name" json:"complainant_name,omitempty"`
+	GDID             uint       `db:"gd_id" json:"gd_id"`
+	GDNumber         string     `db:"gd_number" json:"gd_number"`
+	BranchID         uint       `db:"branch_id" json:"branch_id"`
+	BranchName       *string    `db:"branch_name" json:"branch_name,omitempty"`
+	GDDate           time.Time  `db:"gd_date" json:"gd_date"`
+	Subject          string     `db:"subject" json:"subject"`
+	CurrentStatus    string     `db:"current_status" json:"current_status"`
+	IncidentPlace    *string    `db:"incident_place" json:"incident_place,omitempty"`
+	ComplainantID    uint       `db:"complainant_id" json:"complainant_id"`
+	ComplainantName  *string    `db:"complainant_name" json:"complainant_name,omitempty"`
+	ComplainantPhone *string    `db:"complainant_phone" json:"complainant_phone,omitempty"`
+	ComplaintID      *uint      `db:"complaint_id" json:"complaint_id,omitempty"`
+	CreatedByUserID  *uint      `db:"created_by_user_id" json:"created_by_user_id,omitempty"`
+	ApprovedByUserID *uint      `db:"approved_by_user_id" json:"approved_by_user_id,omitempty"`
+	ApprovedAt       *time.Time `db:"approved_at" json:"approved_at,omitempty"`
+	CreatedAt        time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time  `db:"updated_at" json:"updated_at"`
+}
+
+// GDStatusHistory maps to table `gd_status_history`
+type GDStatusHistory struct {
+	HistoryID      uint      `db:"history_id" json:"history_id"`
+	GDID           uint      `db:"gd_id" json:"gd_id"`
+	PreviousStatus *string   `db:"previous_status" json:"previous_status,omitempty"`
+	NewStatus      string    `db:"new_status" json:"new_status"`
+	Decision       string    `db:"decision" json:"decision"`
+	Reason         *string   `db:"reason" json:"reason,omitempty"`
+	ActingUserID   *uint     `db:"acting_user_id" json:"acting_user_id,omitempty"`
+	ActingUsername *string   `db:"acting_username" json:"acting_username,omitempty"`
+	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
 // FIR maps to table `fir` (First Information Report)
 type FIR struct {
-	FIRID         uint           `db:"fir_id" json:"fir_id"`
-	FIRNumber     string         `db:"fir_number" json:"fir_number"`
-	CrimeCategory string         `db:"crime_category" json:"crime_category"`
-	FiledDate     time.Time      `db:"filed_date" json:"filed_date"`
-	GDID          *uint          `db:"gd_id" json:"gd_id,omitempty"`
-	GDNumber      *string        `db:"gd_number" json:"gd_number,omitempty"`
-	LegalSections []LegalSection `json:"legal_sections,omitempty"`
+	FIRID             uint           `db:"fir_id" json:"fir_id"`
+	FIRNumber         string         `db:"fir_number" json:"fir_number"`
+	BranchID          uint           `db:"branch_id" json:"branch_id"`
+	BranchName        *string        `db:"branch_name" json:"branch_name,omitempty"`
+	ComplainantID     *uint          `db:"complainant_id" json:"complainant_id,omitempty"`
+	ComplainantName   *string        `db:"complainant_name" json:"complainant_name,omitempty"`
+	ComplainantPhone  *string        `db:"complainant_phone" json:"complainant_phone,omitempty"`
+	CrimeCategory     string         `db:"crime_category" json:"crime_category"`
+	CurrentStatus     string         `db:"current_status" json:"current_status"`
+	PlaceOfOccurrence *string        `db:"place_of_occurrence" json:"place_of_occurrence,omitempty"`
+	IncidentDate      *time.Time     `db:"incident_date" json:"incident_date,omitempty"`
+	IncidentTime      *string        `db:"incident_time" json:"incident_time,omitempty"`
+	FiledDate         time.Time      `db:"filed_date" json:"filed_date"`
+	GDID              *uint          `db:"gd_id" json:"gd_id,omitempty"`
+	GDNumber          *string        `db:"gd_number" json:"gd_number,omitempty"`
+	SourceComplaintID *uint          `db:"source_complaint_id" json:"source_complaint_id,omitempty"`
+	SourceType        string         `db:"source_type" json:"source_type"`
+	CreatedByUserID   *uint          `db:"created_by_user_id" json:"created_by_user_id,omitempty"`
+	ApprovedByUserID  *uint          `db:"approved_by_user_id" json:"approved_by_user_id,omitempty"`
+	ApprovedAt        *time.Time     `db:"approved_at" json:"approved_at,omitempty"`
+	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time      `db:"updated_at" json:"updated_at"`
+	LegalSections     []LegalSection `json:"legal_sections,omitempty"`
+}
+
+// FIRStatusHistory maps to table `fir_status_history`
+type FIRStatusHistory struct {
+	HistoryID      uint      `db:"history_id" json:"history_id"`
+	FIRID          uint      `db:"fir_id" json:"fir_id"`
+	PreviousStatus *string   `db:"previous_status" json:"previous_status,omitempty"`
+	NewStatus      string    `db:"new_status" json:"new_status"`
+	Decision       string    `db:"decision" json:"decision"`
+	Reason         *string   `db:"reason" json:"reason,omitempty"`
+	ActingUserID   *uint     `db:"acting_user_id" json:"acting_user_id,omitempty"`
+	ActingUsername *string   `db:"acting_username" json:"acting_username,omitempty"`
+	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
 // LegalSection maps to table `legal_section`
@@ -147,18 +200,59 @@ type ComplainantContactDTO struct {
 }
 
 type CreateGDRequest struct {
-	GDNumber      string `json:"gd_number" binding:"required,max=50"`
-	GDDate        string `json:"gd_date" binding:"required"` // Format: YYYY-MM-DD
+	GDNumber      string `json:"gd_number"` // Optional: auto-generated if empty
+	BranchID      uint   `json:"branch_id"`
+	GDDate        string `json:"gd_date"` // Format: YYYY-MM-DD
 	Subject       string `json:"subject" binding:"required"`
+	IncidentPlace string `json:"incident_place"`
 	ComplainantID uint   `json:"complainant_id" binding:"required"`
+	ComplaintID   *uint  `json:"complaint_id"`
 }
 
 type CreateFIRRequest struct {
-	FIRNumber     string `json:"fir_number" binding:"required,max=50"`
-	CrimeCategory string `json:"crime_category" binding:"required,max=100"`
-	FiledDate     string `json:"filed_date" binding:"required"` // Format: YYYY-MM-DD
-	GDID          *uint  `json:"gd_id"`
-	SectionIDs    []uint `json:"section_ids"`
+	FIRNumber         string `json:"fir_number"` // Optional: auto-generated if empty
+	BranchID          uint   `json:"branch_id"`
+	ComplainantID     *uint  `json:"complainant_id"`
+	CrimeCategory     string `json:"crime_category" binding:"required,max=100"`
+	PlaceOfOccurrence string `json:"place_of_occurrence"`
+	IncidentDate      string `json:"incident_date"`
+	IncidentTime      string `json:"incident_time"`
+	FiledDate         string `json:"filed_date"` // Format: YYYY-MM-DD
+	GDID              *uint  `json:"gd_id"`
+	SourceComplaintID *uint  `json:"source_complaint_id"`
+	SourceType        string `json:"source_type"`
+	SectionIDs        []uint `json:"section_ids"`
+}
+
+type ConvertComplaintToGDRequest struct {
+	Subject       string `json:"subject"`
+	IncidentPlace string `json:"incident_place"`
+}
+
+type ConvertComplaintToFIRRequest struct {
+	CrimeCategory     string `json:"crime_category" binding:"required"`
+	PlaceOfOccurrence string `json:"place_of_occurrence"`
+	IncidentDate      string `json:"incident_date"`
+	IncidentTime      string `json:"incident_time"`
+	SectionIDs        []uint `json:"section_ids"`
+}
+
+type LinkGDToFIRRequest struct {
+	CrimeCategory     string `json:"crime_category" binding:"required"`
+	PlaceOfOccurrence string `json:"place_of_occurrence"`
+	SectionIDs        []uint `json:"section_ids"`
+}
+
+type UpdateGDStatusRequest struct {
+	NewStatus string `json:"new_status" binding:"required"`
+	Decision  string `json:"decision" binding:"required"`
+	Reason    string `json:"reason" binding:"required"`
+}
+
+type UpdateFIRStatusRequest struct {
+	NewStatus string `json:"new_status" binding:"required"`
+	Decision  string `json:"decision" binding:"required"`
+	Reason    string `json:"reason" binding:"required"`
 }
 
 type CreateCaseRequest struct {

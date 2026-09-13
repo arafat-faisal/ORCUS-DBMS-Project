@@ -1,12 +1,12 @@
 // ============================================================================
-// [ORIGIN: A.K. Md. Shakil Hossain (241400043) - Module 2: Investigation Intake & Cases]
 // File: backend/internal/handler/intake_handler.go
-// Purpose: HTTP controllers for complainants, contacts, General Diary (GD), FIR, and legal sections.
+// Purpose: HTTP controllers for complainants, General Diary (GD), FIR, and legal sections.
 // ============================================================================
 
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -17,11 +17,15 @@ import (
 )
 
 type IntakeHandler struct {
-	intakeService *service.IntakeService
+	intakeService    *service.IntakeService
+	complaintService service.ComplaintService
 }
 
-func NewIntakeHandler(intakeService *service.IntakeService) *IntakeHandler {
-	return &IntakeHandler{intakeService: intakeService}
+func NewIntakeHandler(intakeService *service.IntakeService, complaintService service.ComplaintService) *IntakeHandler {
+	return &IntakeHandler{
+		intakeService:    intakeService,
+		complaintService: complaintService,
+	}
 }
 
 // ----------------------------------------------------------------------------
@@ -120,7 +124,14 @@ func (h *IntakeHandler) CreateGD(c *gin.Context) {
 		return
 	}
 
-	gd, err := h.intakeService.CreateGD(c.Request.Context(), &req)
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	gd, err := h.intakeService.CreateGD(c.Request.Context(), &req, actingUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.StandardResponse{
 			Success: false,
@@ -137,15 +148,24 @@ func (h *IntakeHandler) CreateGD(c *gin.Context) {
 }
 
 func (h *IntakeHandler) ListGDs(c *gin.Context) {
-	complainantIDStr := c.Query("complainant_id")
 	var complainantID uint
-	if complainantIDStr != "" {
-		if id, err := strconv.ParseUint(complainantIDStr, 10, 32); err == nil {
+	if cid := c.Query("complainant_id"); cid != "" {
+		if id, err := strconv.ParseUint(cid, 10, 32); err == nil {
 			complainantID = uint(id)
 		}
 	}
 
-	gds, err := h.intakeService.ListGDs(c.Request.Context(), complainantID)
+	var branchID uint
+	if bid := c.Query("branch_id"); bid != "" {
+		if id, err := strconv.ParseUint(bid, 10, 32); err == nil {
+			branchID = uint(id)
+		}
+	}
+
+	status := c.Query("status")
+	search := c.Query("search")
+
+	gds, err := h.intakeService.FilterGDs(c.Request.Context(), complainantID, branchID, status, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.StandardResponse{
 			Success: false,
@@ -185,13 +205,154 @@ func (h *IntakeHandler) GetGD(c *gin.Context) {
 	if gd == nil {
 		c.JSON(http.StatusNotFound, models.StandardResponse{
 			Success: false,
-			Error:   "GD entry not found",
+			Error:   "General Diary entry not found",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
+		Data:    gd,
+	})
+}
+
+func (h *IntakeHandler) GetGDHistory(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid GD ID",
+		})
+		return
+	}
+
+	history, err := h.intakeService.GetGDHistory(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Data:    history,
+	})
+}
+
+func (h *IntakeHandler) UpdateGDStatus(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid GD ID",
+		})
+		return
+	}
+
+	var req models.UpdateGDStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	err = h.intakeService.UpdateGDStatus(c.Request.Context(), uint(id), &req, actingUserID)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidGDTransition) {
+			c.JSON(http.StatusConflict, models.StandardResponse{
+				Success: false,
+				Error:   err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	gd, _ := h.intakeService.GetGD(c.Request.Context(), uint(id))
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "General Diary status updated successfully",
+		Data:    gd,
+	})
+}
+
+func (h *IntakeHandler) ConvertComplaintToGD(c *gin.Context) {
+	idParam := c.Param("id")
+	complaintID, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid complaint ID",
+		})
+		return
+	}
+
+	var req models.ConvertComplaintToGDRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	// Verify complaint exists
+	complaint, err := h.complaintService.GetComplaint(uint(complaintID))
+	if err != nil || complaint == nil {
+		c.JSON(http.StatusNotFound, models.StandardResponse{
+			Success: false,
+			Error:   "Complaint not found",
+		})
+		return
+	}
+
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	if req.Subject == "" {
+		req.Subject = complaint.Title
+	}
+
+	gd, err := h.intakeService.ConvertComplaintToGD(
+		c.Request.Context(),
+		uint(complaintID),
+		&req,
+		complaint.ComplainantID,
+		complaint.ReceivingBranchID,
+		actingUserID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, models.StandardResponse{
+		Success: true,
+		Message: "Complaint converted to General Diary successfully",
 		Data:    gd,
 	})
 }
@@ -210,7 +371,14 @@ func (h *IntakeHandler) CreateFIR(c *gin.Context) {
 		return
 	}
 
-	fir, err := h.intakeService.CreateFIR(c.Request.Context(), &req)
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	fir, err := h.intakeService.CreateFIR(c.Request.Context(), &req, actingUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.StandardResponse{
 			Success: false,
@@ -221,14 +389,23 @@ func (h *IntakeHandler) CreateFIR(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, models.StandardResponse{
 		Success: true,
-		Message: "First Information Report (FIR) filed successfully",
+		Message: "FIR registered successfully",
 		Data:    fir,
 	})
 }
 
 func (h *IntakeHandler) ListFIRs(c *gin.Context) {
-	category := c.Query("crime_category")
-	firs, err := h.intakeService.ListFIRs(c.Request.Context(), category)
+	category := c.Query("category")
+	status := c.Query("status")
+	search := c.Query("search")
+	var branchID uint
+	if bid := c.Query("branch_id"); bid != "" {
+		if id, err := strconv.ParseUint(bid, 10, 32); err == nil {
+			branchID = uint(id)
+		}
+	}
+
+	firs, err := h.intakeService.FilterFIRs(c.Request.Context(), category, branchID, status, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.StandardResponse{
 			Success: false,
@@ -275,6 +452,192 @@ func (h *IntakeHandler) GetFIR(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
+		Data:    fir,
+	})
+}
+
+func (h *IntakeHandler) GetFIRHistory(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid FIR ID",
+		})
+		return
+	}
+
+	history, err := h.intakeService.GetFIRHistory(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Data:    history,
+	})
+}
+
+func (h *IntakeHandler) UpdateFIRStatus(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid FIR ID",
+		})
+		return
+	}
+
+	var req models.UpdateFIRStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	err = h.intakeService.UpdateFIRStatus(c.Request.Context(), uint(id), &req, actingUserID)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidFIRTransition) {
+			c.JSON(http.StatusConflict, models.StandardResponse{
+				Success: false,
+				Error:   err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	fir, _ := h.intakeService.GetFIR(c.Request.Context(), uint(id))
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "FIR status updated successfully",
+		Data:    fir,
+	})
+}
+
+func (h *IntakeHandler) ConvertComplaintToFIR(c *gin.Context) {
+	idParam := c.Param("id")
+	complaintID, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid complaint ID",
+		})
+		return
+	}
+
+	var req models.ConvertComplaintToFIRRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	complaint, err := h.complaintService.GetComplaint(uint(complaintID))
+	if err != nil || complaint == nil {
+		c.JSON(http.StatusNotFound, models.StandardResponse{
+			Success: false,
+			Error:   "Complaint not found",
+		})
+		return
+	}
+
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	fir, err := h.intakeService.ConvertComplaintToFIR(
+		c.Request.Context(),
+		uint(complaintID),
+		&req,
+		complaint.ComplainantID,
+		complaint.ReceivingBranchID,
+		actingUserID,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, models.StandardResponse{
+		Success: true,
+		Message: "Complaint converted to FIR successfully",
+		Data:    fir,
+	})
+}
+
+func (h *IntakeHandler) LinkGDToFIR(c *gin.Context) {
+	idParam := c.Param("id")
+	gdID, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid GD ID",
+		})
+		return
+	}
+
+	var req models.LinkGDToFIRRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	var actingUserID *uint
+	if val, ok := c.Get("user_id"); ok {
+		if uid, valid := val.(uint); valid {
+			actingUserID = &uid
+		}
+	}
+
+	fir, err := h.intakeService.LinkGDToFIR(c.Request.Context(), uint(gdID), &req, actingUserID)
+	if err != nil {
+		if errors.Is(err, service.ErrGDAlreadyLinked) {
+			c.JSON(http.StatusConflict, models.StandardResponse{
+				Success: false,
+				Error:   err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, models.StandardResponse{
+		Success: true,
+		Message: "General Diary escalated and linked to formal FIR",
 		Data:    fir,
 	})
 }
