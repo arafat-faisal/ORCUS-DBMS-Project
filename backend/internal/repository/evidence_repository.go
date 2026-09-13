@@ -212,3 +212,29 @@ func (r *EvidenceRepository) GetEvidenceChainOfCustody(ctx context.Context, evid
 	}
 	return logs, nil
 }
+
+// DeleteEvidence removes an evidence item and its associated history and linkages
+func (r *EvidenceRepository) DeleteEvidence(ctx context.Context, evidenceID uint) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM victim_evidence WHERE evidence_id = ?", evidenceID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM evidence_status_history WHERE evidence_id = ?", evidenceID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, "DELETE FROM evidence WHERE evidence_id = ?", evidenceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete evidence: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil || rows == 0 {
+		return errors.New("evidence not found")
+	}
+
+	return tx.Commit()
+}

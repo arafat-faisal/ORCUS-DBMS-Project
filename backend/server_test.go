@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -99,11 +101,32 @@ func setupTestServer(t *testing.T) (*gin.Engine, string) {
 	return router, cfg.JWTSecret
 }
 
-func getAdminToken(t *testing.T, router *gin.Engine) string {
-	return getUserToken(t, router, "admin_faisal", "Faisal@Admin2026!")
+func getTestPassword(username string) string {
+	credsFile := filepath.Join(".", ".env.seed_credentials")
+	if data, err := os.ReadFile(credsFile); err == nil {
+		envKey := strings.ToUpper(username) + "_PASSWORD"
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, envKey+"=") {
+				return strings.TrimPrefix(line, envKey+"=")
+			}
+		}
+	}
+	if pwd := os.Getenv(strings.ToUpper(username) + "_PASSWORD"); pwd != "" {
+		return pwd
+	}
+	return ""
 }
 
-func getUserToken(t *testing.T, router *gin.Engine, username, password string) string {
+func getAdminToken(t *testing.T, router *gin.Engine) string {
+	return getUserToken(t, router, "admin_faisal")
+}
+
+func getUserToken(t *testing.T, router *gin.Engine, username string, customPassword ...string) string {
+	password := getTestPassword(username)
+	if len(customPassword) > 0 && customPassword[0] != "" {
+		password = customPassword[0]
+	}
 	loginPayload, _ := json.Marshal(models.LoginRequest{
 		Username: username,
 		Password: password,
@@ -169,7 +192,7 @@ func TestModule1_AuthAndOrganization(t *testing.T) {
 func TestModule2_IntakeAndCases(t *testing.T) {
 	router, _ := setupTestServer(t)
 	// Intake operations require Duty Officer or Investigating Officer (Separation of duties)
-	dutyOfficerToken := getUserToken(t, router, "si_nusrat", "Nusrat@Duty2026!")
+	dutyOfficerToken := getUserToken(t, router, "si_nusrat")
 
 	// 1. Create Complainant as Duty Officer
 	compPayload, _ := json.Marshal(models.CreateComplainantRequest{
@@ -285,7 +308,7 @@ func TestSecurity_BackdoorRejectedAndCookies(t *testing.T) {
 	// 2. Verify authentic credentials succeed and set HttpOnly cookie
 	loginPayload, _ := json.Marshal(models.LoginRequest{
 		Username: "admin_faisal",
-		Password: "Faisal@Admin2026!",
+		Password: getTestPassword("admin_faisal"),
 	})
 	req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(loginPayload))
 	req.Header.Set("Content-Type", "application/json")
@@ -368,7 +391,7 @@ func TestSecurity_BackdoorRejectedAndCookies(t *testing.T) {
 	// Log in as Field Detective si_nusrat
 	loginDet, _ := json.Marshal(models.LoginRequest{
 		Username: "si_nusrat",
-		Password: "Nusrat@Duty2026!",
+		Password: getTestPassword("si_nusrat"),
 	})
 	reqDetLogin, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(loginDet))
 	reqDetLogin.Header.Set("Content-Type", "application/json")
@@ -410,7 +433,7 @@ func TestAuditLogging_Verification(t *testing.T) {
 	// 1. Log in as admin_faisal to trigger audit log creation
 	loginBody, _ := json.Marshal(models.LoginRequest{
 		Username: "admin_faisal",
-		Password: "Faisal@Admin2026!",
+		Password: getTestPassword("admin_faisal"),
 	})
 	reqLogin, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(loginBody))
 	reqLogin.Header.Set("Content-Type", "application/json")
@@ -461,14 +484,15 @@ func TestAuditLogging_Verification(t *testing.T) {
 	}
 
 	// Verify entries contain required fields and no secrets
+	adminPwd := getTestPassword("admin_faisal")
 	for _, entry := range auditResp.Data {
 		if entry.Action == "" || entry.Route == "" || entry.HTTPMethod == "" {
 			t.Errorf("Audit log entry missing required fields: %+v", entry)
 		}
-		if entry.BeforeSummary != nil && strings.Contains(*entry.BeforeSummary, "Faisal@Admin2026!") {
+		if entry.BeforeSummary != nil && adminPwd != "" && strings.Contains(*entry.BeforeSummary, adminPwd) {
 			t.Errorf("SECURITY DEFECT: Sensitive password found in before_summary: %s", *entry.BeforeSummary)
 		}
-		if entry.AfterSummary != nil && strings.Contains(*entry.AfterSummary, "Faisal@Admin2026!") {
+		if entry.AfterSummary != nil && adminPwd != "" && strings.Contains(*entry.AfterSummary, adminPwd) {
 			t.Errorf("SECURITY DEFECT: Sensitive password found in after_summary: %s", *entry.AfterSummary)
 		}
 	}
@@ -476,7 +500,7 @@ func TestAuditLogging_Verification(t *testing.T) {
 	// 4. Verify negative authorization: non-admin (si_nusrat) gets 403 Forbidden
 	detLoginBody, _ := json.Marshal(models.LoginRequest{
 		Username: "si_nusrat",
-		Password: "Nusrat@Duty2026!",
+		Password: getTestPassword("si_nusrat"),
 	})
 	reqDetLogin, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(detLoginBody))
 	reqDetLogin.Header.Set("Content-Type", "application/json")
@@ -513,13 +537,13 @@ func TestRoleAuthorization_SeparationOfDuties(t *testing.T) {
 	router, _ := setupTestServer(t)
 
 	// Fetch tokens for all key actors
-	adminToken := getUserToken(t, router, "admin_faisal", "Faisal@Admin2026!")
-	dutyOfficerToken := getUserToken(t, router, "si_nusrat", "Nusrat@Duty2026!")
-	investigatorToken := getUserToken(t, router, "det_shakil", "Shakil@Invest2026!")
-	evidenceOfficerToken := getUserToken(t, router, "forensic_liza", "Liza@Forensic2026!")
-	oicToken := getUserToken(t, router, "insp_tariq", "Tariq@Invest2026!")
-	auditorToken := getUserToken(t, router, "system_auditor", "Auditor@Audit2026!")
-	publicToken := getUserToken(t, router, "complainant_rahim", "Rahim@Public2026!")
+	adminToken := getUserToken(t, router, "admin_faisal")
+	dutyOfficerToken := getUserToken(t, router, "si_nusrat")
+	investigatorToken := getUserToken(t, router, "det_shakil")
+	evidenceOfficerToken := getUserToken(t, router, "forensic_liza")
+	oicToken := getUserToken(t, router, "insp_tariq")
+	auditorToken := getUserToken(t, router, "system_auditor")
+	publicToken := getUserToken(t, router, "complainant_rahim")
 
 	// 1. Separation of Duties: Administrator CANNOT alter investigation facts (create complainant)
 	compPayload, _ := json.Marshal(models.CreateComplainantRequest{
@@ -878,7 +902,7 @@ func TestComplaintWorkflowAndIdentifiers(t *testing.T) {
 	}
 
 	// 4. Officer Intake & Assessment Workflow (Phase 6)
-	dutyOfficerToken := getUserToken(t, router, "si_nusrat", "Nusrat@Duty2026!")
+	dutyOfficerToken := getUserToken(t, router, "si_nusrat")
 
 	// Query complaint by tracking code to get complaint_id
 	reqList, _ := http.NewRequest("GET", fmt.Sprintf("/api/v1/complaints?search=%s", trackingCode), nil)
@@ -972,9 +996,9 @@ func TestComplaintWorkflowAndIdentifiers(t *testing.T) {
 func TestGDFIRWorkflowAndConversions(t *testing.T) {
 	router, _ := setupTestServer(t)
 
-	oicToken := getUserToken(t, router, "insp_tariq", "Tariq@Invest2026!")
-	dutyOfficerToken := getUserToken(t, router, "si_nusrat", "Nusrat@Duty2026!")
-	publicToken := getUserToken(t, router, "complainant_rahim", "Rahim@Public2026!")
+	oicToken := getUserToken(t, router, "insp_tariq")
+	dutyOfficerToken := getUserToken(t, router, "si_nusrat")
+	publicToken := getUserToken(t, router, "complainant_rahim")
 
 	// 1. Submit and verify a fresh complaint for GD conversion
 	complaintReq, _ := json.Marshal(map[string]interface{}{

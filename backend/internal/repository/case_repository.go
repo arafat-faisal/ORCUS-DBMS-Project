@@ -231,3 +231,45 @@ func (r *CaseRepository) GetCaseStatusHistory(ctx context.Context, caseID uint) 
 	}
 	return history, nil
 }
+
+// DeleteCase removes a case and all dependent items within an isolated transaction
+func (r *CaseRepository) DeleteCase(ctx context.Context, caseID uint) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Clean up evidence linked to case
+	if _, err := tx.ExecContext(ctx, "DELETE FROM victim_evidence WHERE evidence_id IN (SELECT evidence_id FROM evidence WHERE case_id = ?)", caseID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM evidence_status_history WHERE evidence_id IN (SELECT evidence_id FROM evidence WHERE case_id = ?)", caseID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM evidence WHERE case_id = ?", caseID); err != nil {
+		return err
+	}
+
+	// 2. Clean up case junctions and histories
+	tx.ExecContext(ctx, "DELETE FROM case_assignment_history WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM case_location WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM case_status_history WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM case_suspect WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM case_victim WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM case_witness WHERE case_id = ?", caseID)
+	tx.ExecContext(ctx, "DELETE FROM investigation_activity WHERE case_id = ?", caseID)
+
+	// 3. Delete case
+	res, err := tx.ExecContext(ctx, "DELETE FROM `case` WHERE case_id = ?", caseID)
+	if err != nil {
+		return fmt.Errorf("failed to delete case: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil || rows == 0 {
+		return errors.New("case not found")
+	}
+
+	return tx.Commit()
+}
+

@@ -54,12 +54,16 @@ func LoadConfig() *Config {
 		jwtSecret = base64.StdEncoding.EncodeToString(b)
 	}
 
-	corsRaw := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:7700,http://localhost:3000,http://127.0.0.1:7700")
+	corsRaw := getEnv("CORS_ALLOWED_ORIGINS", "*")
 	var origins []string
-	for _, o := range strings.Split(corsRaw, ",") {
-		trimmed := strings.TrimSpace(o)
-		if trimmed != "" {
-			origins = append(origins, trimmed)
+	if corsRaw == "*" {
+		origins = []string{"*"}
+	} else {
+		for _, o := range strings.Split(corsRaw, ",") {
+			trimmed := strings.TrimSpace(o)
+			if trimmed != "" {
+				origins = append(origins, trimmed)
+			}
 		}
 	}
 

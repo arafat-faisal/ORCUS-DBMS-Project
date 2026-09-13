@@ -4,11 +4,24 @@ prep/
 *.exe
 .env
 *.env
+*.env*
+.env*
 backend/.env
+backend/.env*
 frontend/.env.local
 frontend/.env*.local
+*.seed_credentials
 *.sql.bak
 node_modules/
 dist/
 .next/
 
+# Automation scripts & caches
+scripts/
+frontend/scripts/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+docs/screenshots/
+docs/presentation_assets/

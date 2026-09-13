@@ -1,13 +1,26 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func generateSecurePassword() string {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("Failed to generate secure random bytes: %v", err)
+	}
+	return base64.URLEncoding.EncodeToString(b) + "!A1"
+}
 
 func main() {
 	dsn := "root:@tcp(127.0.0.1:3306)/orcus_db?charset=utf8mb4&parseTime=True"
@@ -17,23 +30,53 @@ func main() {
 	}
 	defer db.Close()
 
-	// Distinct known demonstration passwords for seed accounts
-	passwords := map[string]string{
-		"admin_faisal":   "Faisal@Admin2026!",
-		"det_shakil":     "Shakil@Invest2026!",
-		"forensic_liza":  "Liza@Forensic2026!",
-		"insp_tariq":     "Tariq@Invest2026!",
-		"si_nusrat":      "Nusrat@Duty2026!",
-		"det_mahmud":     "Mahmud@Invest2026!",
-		"cyber_kamrul":   "Kamrul@Cyber2026!",
-		"intel_farhana":  "Farhana@Intel2026!",
-		"system_auditor": "Auditor@Audit2026!",
+	users := []string{
+		"admin_faisal",
+		"det_shakil",
+		"forensic_liza",
+		"insp_tariq",
+		"si_nusrat",
+		"det_mahmud",
+		"cyber_kamrul",
+		"intel_farhana",
+		"system_auditor",
+		"complainant_rahim",
 	}
 
-	fmt.Println("Generating authentic bcrypt hashes and updating orcus_db.user...")
+	credsFile := filepath.Join(".", ".env.seed_credentials")
+	credsData := make(map[string]string)
 
-	for username, plainPwd := range passwords {
-		hash, err := bcrypt.GenerateFromPassword([]byte(plainPwd), 10)
+	// Check if local credentials file exists
+	if data, err := os.ReadFile(credsFile); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				credsData[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	var outputLines []string
+	outputLines = append(outputLines, "# Local Development Seed Credentials (DO NOT COMMIT)")
+
+	for _, username := range users {
+		envKey := strings.ToUpper(username) + "_PASSWORD"
+		pwd := os.Getenv(envKey)
+		if pwd == "" {
+			pwd = credsData[envKey]
+		}
+		if pwd == "" {
+			pwd = generateSecurePassword()
+		}
+		credsData[envKey] = pwd
+		outputLines = append(outputLines, fmt.Sprintf("%s=%s", envKey, pwd))
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(pwd), 10)
 		if err != nil {
 			log.Fatalf("Failed to hash password for %s: %v", username, err)
 		}
@@ -42,8 +85,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to update user %s: %v", username, err)
 		}
-		fmt.Printf("Updated %-15s -> Hash: %s... (Password: %s)\n", username, string(hash)[:20], plainPwd)
 	}
 
-	fmt.Println("All seed account passwords securely updated with genuine bcrypt hashes.")
+	if err := os.WriteFile(credsFile, []byte(strings.Join(outputLines, "\n")+"\n"), 0600); err != nil {
+		log.Fatalf("Failed to write seed credentials file: %v", err)
+	}
+
+	fmt.Println("Database account credentials successfully rotated and updated with genuine bcrypt hashes.")
+	fmt.Println("Credentials safely recorded to uncommitted local configuration.")
 }

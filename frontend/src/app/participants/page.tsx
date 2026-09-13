@@ -2,619 +2,519 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { PortalLayout } from "@/components/layout/PortalLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
-import { Suspect, Victim, Witness, CaseOverview, UserProfile } from "@/lib/types";
+import { Suspect, Victim, Witness, Complainant } from "@/lib/types";
 import { useLocale } from "@/lib/locale";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/FeedbackStates";
 import {
   Users,
   Search,
-  Filter,
-  Plus,
-  Shield,
-  AlertTriangle,
-  FileText,
-  Phone,
-  FolderLock,
+  PlusCircle,
+  User,
+  ShieldCheck,
   Eye,
+  AlertCircle,
   CheckCircle2,
-  HeartCrack,
 } from "lucide-react";
 
 export default function ParticipantsPage() {
-  const { t } = useLocale();
+  const { locale } = useLocale();
 
-  const [activeTab, setActiveTab] = useState<"suspects" | "victims" | "witnesses">("suspects");
+  const [activeTab, setActiveTab] = useState<"suspects" | "victims" | "witnesses" | "complainants">("suspects");
   const [suspects, setSuspects] = useState<Suspect[]>([]);
   const [victims, setVictims] = useState<Victim[]>([]);
   const [witnesses, setWitnesses] = useState<Witness[]>([]);
-  const [cases, setCases] = useState<CaseOverview[]>([]);
+  const [complainants, setComplainants] = useState<Complainant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Modals
-  const [showSuspectModal, setShowSuspectModal] = useState(false);
-  const [showVictimModal, setShowVictimModal] = useState(false);
-  const [showWitnessModal, setShowWitnessModal] = useState(false);
+  // Inline registration panel
+  const [showRegisterPanel, setShowRegisterPanel] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regDetail, setRegDetail] = useState("");
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [regFeedback, setRegFeedback] = useState<string | null>(null);
 
-  // Form states
-  const [sFirstName, setSFirstName] = useState("");
-  const [sLastName, setSLastName] = useState("");
-  const [sAge, setSAge] = useState("");
-  const [sSuspicion, setSSuspicion] = useState("Medium");
-  const [sSign, setSSign] = useState("");
-
-  const [vName, setVName] = useState("");
-  const [vPhone, setVPhone] = useState("");
-  const [vNotes, setVNotes] = useState("");
-
-  const [wName, setWName] = useState("");
-  const [wPhone, setWPhone] = useState("");
-  const [wReliability, setWReliability] = useState("High");
-  const [wProtected, setWProtected] = useState(false);
-  const [wStatement, setWStatement] = useState("");
-
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    async function loadParticipants() {
-      setLoading(true);
-      const [sRes, vRes, wRes, cRes] = await Promise.all([
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [sRes, vRes, wRes, compRes] = await Promise.all([
         api.listSuspects(),
         api.listVictims(),
         api.listWitnesses(),
-        api.searchCases(),
+        api.listComplainants(),
       ]);
 
       if (sRes.success && sRes.data) setSuspects(sRes.data);
       if (vRes.success && vRes.data) setVictims(vRes.data);
       if (wRes.success && wRes.data) setWitnesses(wRes.data);
-      if (cRes.success && cRes.data) setCases(cRes.data);
+      if (compRes.success && compRes.data) setComplainants(compRes.data);
+    } catch {
+      setError("Network error while loading participants.");
+    } finally {
       setLoading(false);
     }
-    loadParticipants();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
-  const handleCreateSuspect = async (e: React.FormEvent) => {
+  const handleRegisterParticipant = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sFirstName || !sLastName) return;
-
-    setSubmitting(true);
-    const res = await api.createSuspect({
-      first_name: sFirstName,
-      last_name: sLastName,
-      age: sAge ? parseInt(sAge, 10) : undefined,
-      suspicion_level: sSuspicion,
-      identification_sign: sSign || undefined,
-    });
-
-    if (res.success && res.data) {
-      setSuspects([res.data, ...suspects]);
-      setShowSuspectModal(false);
-      setSFirstName("");
-      setSLastName("");
-      setSAge("");
-      setSSign("");
-    } else {
-      alert(res.error || "Failed to register suspect");
+    if (!regName.trim()) {
+      setRegFeedback("Participant name is required.");
+      return;
     }
-    setSubmitting(false);
-  };
 
-  const handleCreateVictim = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!vName) return;
-
-    setSubmitting(true);
-    const res = await api.createVictim({
-      name: vName,
-      phone: vPhone || undefined,
-      condition_notes: vNotes || undefined,
-    });
-
-    if (res.success && res.data) {
-      setVictims([res.data, ...victims]);
-      setShowVictimModal(false);
-      setVName("");
-      setVPhone("");
-      setVNotes("");
-    } else {
-      alert(res.error || "Failed to record victim profile");
+    setRegSubmitting(true);
+    setRegFeedback(null);
+    try {
+      if (activeTab === "suspects") {
+        const parts = regName.trim().split(" ");
+        const first = parts[0];
+        const last = parts.slice(1).join(" ") || "Unknown";
+        const res = await api.createSuspect({
+          first_name: first,
+          last_name: last,
+          suspicion_level: "Medium",
+          identification_sign: regDetail || undefined,
+        });
+        if (res.success && res.data) {
+          setSuspects([res.data, ...suspects]);
+          setRegFeedback("Suspect recorded in neutral database registry.");
+          setShowRegisterPanel(false);
+          setRegName("");
+          setRegDetail("");
+        }
+      } else if (activeTab === "victims") {
+        const res = await api.createVictim({
+          name: regName.trim(),
+          phone: regPhone.trim() || undefined,
+          condition_notes: regDetail || undefined,
+        });
+        if (res.success && res.data) {
+          setVictims([res.data, ...victims]);
+          setRegFeedback("Victim record created.");
+          setShowRegisterPanel(false);
+          setRegName("");
+          setRegPhone("");
+          setRegDetail("");
+        }
+      } else if (activeTab === "witnesses") {
+        const res = await api.createWitness({
+          name: regName.trim(),
+          phone: regPhone.trim() || undefined,
+          reliability: "High",
+          statement_summary: regDetail || undefined,
+        });
+        if (res.success && res.data) {
+          setWitnesses([res.data, ...witnesses]);
+          setRegFeedback("Witness record registered.");
+          setShowRegisterPanel(false);
+          setRegName("");
+          setRegPhone("");
+          setRegDetail("");
+        }
+      } else if (activeTab === "complainants") {
+        const res = await api.createComplainant({
+          name: regName.trim(),
+          contacts: regPhone.trim()
+            ? [{ contact_type: "phone", contact_value: regPhone.trim(), is_primary: true }]
+            : [],
+        });
+        if (res.success && res.data) {
+          setComplainants([res.data, ...complainants]);
+          setRegFeedback("Complainant record created.");
+          setShowRegisterPanel(false);
+          setRegName("");
+          setRegPhone("");
+        }
+      }
+    } catch {
+      setRegFeedback("Failed to submit participant record.");
+    } finally {
+      setRegSubmitting(false);
     }
-    setSubmitting(false);
-  };
-
-  const handleCreateWitness = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!wName) return;
-
-    setSubmitting(true);
-    const res = await api.createWitness({
-      name: wName,
-      phone: wPhone || undefined,
-      reliability: wReliability,
-      is_protected: wProtected,
-      statement_summary: wStatement || undefined,
-    });
-
-    if (res.success && res.data) {
-      setWitnesses([res.data, ...witnesses]);
-      setShowWitnessModal(false);
-      setWName("");
-      setWPhone("");
-      setWStatement("");
-    } else {
-      alert(res.error || "Failed to record witness statement");
-    }
-    setSubmitting(false);
   };
 
   const filteredSuspects = suspects.filter(
     (s) =>
+      !searchTerm ||
       `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (s.identification_sign && s.identification_sign.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const filteredVictims = victims.filter(
     (v) =>
+      !searchTerm ||
       v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (v.phone && v.phone.includes(searchTerm))
   );
 
   const filteredWitnesses = witnesses.filter(
     (w) =>
+      !searchTerm ||
       w.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (w.statement_summary && w.statement_summary.toLowerCase().includes(searchTerm.toLowerCase()))
+      (w.phone && w.phone.includes(searchTerm))
+  );
+
+  const filteredComplainants = complainants.filter(
+    (c) => !searchTerm || c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <PortalLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 uppercase tracking-wider mb-1">
-              <Users className="w-4 h-4" />
-              <span>Identity Registry &bull; Criminal & Witness Profiles</span>
-            </div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
-              Case Participants Registry
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Protected identity tracking for suspects, victims, informants, and sworn witnesses.
-            </p>
-          </div>
+    <AppShell>
+      <div className="space-y-6 max-w-7xl mx-auto pb-10">
+        <PageHeader
+          title={locale === "bn" ? "মামলার পক্ষ ও সংশ্লিষ্ট ব্যক্তিবর্গ" : "Participants"}
+          description={
+            locale === "bn"
+              ? "তদন্ত সংশ্লিষ্ট সন্দেহভাজন, ভিকটিম, প্রত্যক্ষদর্শী এবং অভিযোগকারীদের নিরপেক্ষ রেজিস্ট্রি।"
+              : "Neutral case participants directory covering suspects, victims, witnesses, and complainants."
+          }
+          breadcrumbs={[
+            { label: "ORCUS", href: "/dashboard" },
+            { label: locale === "bn" ? "তদন্ত" : "Investigation" },
+            { label: "Participants" },
+          ]}
+          action={
+            <button
+              onClick={() => setShowRegisterPanel(!showRegisterPanel)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Register New {activeTab.slice(0, -1)}</span>
+            </button>
+          }
+        />
 
-          <div className="flex items-center gap-2">
-            {activeTab === "suspects" && (
-              <button
-                onClick={() => setShowSuspectModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-rose-950/40"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Register Suspect</span>
-              </button>
-            )}
-            {activeTab === "victims" && (
-              <button
-                onClick={() => setShowVictimModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-950/40"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Victim</span>
-              </button>
-            )}
-            {activeTab === "witnesses" && (
-              <button
-                onClick={() => setShowWitnessModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-emerald-950/40"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Record Witness</span>
-              </button>
-            )}
-          </div>
+        {/* Quick Tabs */}
+        <div className="border-b border-slate-200 flex gap-6 text-xs font-semibold">
+          <button
+            onClick={() => {
+              setActiveTab("suspects");
+              setShowRegisterPanel(false);
+            }}
+            className={`pb-2.5 transition-colors border-b-2 ${
+              activeTab === "suspects"
+                ? "border-blue-700 text-blue-800"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Suspects ({suspects.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("victims");
+              setShowRegisterPanel(false);
+            }}
+            className={`pb-2.5 transition-colors border-b-2 ${
+              activeTab === "victims"
+                ? "border-blue-700 text-blue-800"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Victims ({victims.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("witnesses");
+              setShowRegisterPanel(false);
+            }}
+            className={`pb-2.5 transition-colors border-b-2 ${
+              activeTab === "witnesses"
+                ? "border-blue-700 text-blue-800"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Witnesses ({witnesses.length})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("complainants");
+              setShowRegisterPanel(false);
+            }}
+            className={`pb-2.5 transition-colors border-b-2 ${
+              activeTab === "complainants"
+                ? "border-blue-700 text-blue-800"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Complainants ({complainants.length})
+          </button>
         </div>
 
-        {/* Tabs & Search */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 md:border-b-0 pb-2 md:pb-0">
-            <button
-              onClick={() => setActiveTab("suspects")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "suspects"
-                  ? "bg-rose-950/70 text-rose-300 border border-rose-800/80"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              Suspects ({suspects.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("victims")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "victims"
-                  ? "bg-cyan-950/70 text-cyan-300 border border-cyan-800/80"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              Victims ({victims.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("witnesses")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "witnesses"
-                  ? "bg-emerald-950/70 text-emerald-300 border border-emerald-800/80"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              Witnesses ({witnesses.length})
-            </button>
-          </div>
+        {/* Inline Register Panel */}
+        {showRegisterPanel && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <h3 className="text-sm font-bold text-slate-900">
+                Register New {activeTab.slice(0, -1)}
+              </h3>
+              <button
+                onClick={() => setShowRegisterPanel(false)}
+                className="text-xs text-slate-500 hover:text-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
 
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+            {regFeedback && (
+              <div className="p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-blue-700 shrink-0" />
+                <span>{regFeedback}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterParticipant} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Anisur Rahman"
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Contact Phone (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    placeholder="01XXXXXXXXX"
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Identification / Particulars / Notes
+                </label>
+                <input
+                  type="text"
+                  value={regDetail}
+                  onChange={(e) => setRegDetail(e.target.value)}
+                  placeholder="e.g. Distinct scar on left forearm, alias 'Liton'..."
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="text-right pt-2">
+                <button
+                  type="submit"
+                  disabled={regSubmitting}
+                  className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-md font-semibold text-xs transition disabled:opacity-50"
+                >
+                  {regSubmitting ? "Saving..." : "Save Record"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Filter / Search Bar */}
+        <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-xs">
+          <div className="relative">
             <input
               type="text"
-              placeholder={`Search ${activeTab}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+              placeholder={`Search ${activeTab} by name or contact...`}
+              className="w-full bg-white border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition"
             />
+            <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2" />
           </div>
         </div>
 
-        {/* Content Tab: Suspects */}
-        {activeTab === "suspects" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSuspects.map((s) => (
-              <div
-                key={s.suspect_id}
-                className="bg-slate-900/50 rounded-xl border border-slate-800 p-5 space-y-3 hover:border-slate-700 transition-all shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[11px] font-mono border ${
-                      s.suspicion_level === "High"
-                        ? "bg-rose-950/80 text-rose-400 border-rose-800/60"
-                        : s.suspicion_level === "Medium"
-                        ? "bg-amber-950/80 text-amber-400 border-amber-800/60"
-                        : "bg-slate-800 text-slate-300 border-slate-700"
-                    }`}
-                  >
-                    {s.suspicion_level} Suspicion
-                  </span>
-                  <span className="text-xs font-mono text-slate-500">ID #{s.suspect_id}</span>
-                </div>
+        {/* State Display */}
+        {loading ? (
+          <LoadingState message="Loading participants registry..." />
+        ) : error ? (
+          <ErrorState message={error} onRetry={loadData} />
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
+            {/* TAB: SUSPECTS */}
+            {activeTab === "suspects" && (
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Name</th>
+                    <th className="py-3 px-4">Alias / Identification</th>
+                    <th className="py-3 px-4">Investigative Status</th>
+                    <th className="py-3 px-4">Suspicion Level</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {filteredSuspects.map((s) => (
+                    <tr key={s.suspect_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>{s.first_name} {s.last_name}</span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {s.identification_sign || "None recorded"}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
+                          {s.status || "Under Investigation"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            s.suspicion_level === "High"
+                              ? "bg-amber-50 text-amber-800 border border-amber-200"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {s.suspicion_level}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-slate-400 text-xs">Record Active</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-                <div>
-                  <h3 className="text-lg font-bold text-slate-100">
-                    {s.first_name} {s.last_name}
-                  </h3>
-                  {s.age && <p className="text-xs text-slate-400 mt-0.5">Approximate Age: {s.age} years</p>}
-                </div>
+            {/* TAB: VICTIMS */}
+            {activeTab === "victims" && (
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Victim Name</th>
+                    <th className="py-3 px-4">Contact Phone</th>
+                    <th className="py-3 px-4">Protection / Condition Notes</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {filteredVictims.map((v) => (
+                    <tr key={v.victim_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>{v.name}</span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-mono">
+                        {v.phone || "Protected Contact"}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate">
+                        {v.condition_notes || "Under judicial protection"}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">
+                          {v.is_deceased ? "Deceased" : "Protected Witness"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-slate-400 text-xs">Active</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-                {s.identification_sign && (
-                  <p className="text-xs text-slate-400 bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
-                    Marks: {s.identification_sign}
-                  </p>
-                )}
+            {/* TAB: WITNESSES */}
+            {activeTab === "witnesses" && (
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Witness Name</th>
+                    <th className="py-3 px-4">Contact Phone</th>
+                    <th className="py-3 px-4">Reliability Index</th>
+                    <th className="py-3 px-4">Protection Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {filteredWitnesses.map((w) => (
+                    <tr key={w.witness_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>{w.name}</span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-mono">
+                        {w.phone || "Protected"}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">
+                        {w.reliability || "Standard"}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-medium">
+                          {w.is_protected ? "Judicial Witness Protection" : "Public Deponent"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-slate-400 text-xs">Active</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-                <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-500">
-                  <span>Status: <strong className="text-slate-300">{s.status || "Identified"}</strong></span>
-                  <span className="font-mono text-cyan-400">NID: Verified</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Content Tab: Victims */}
-        {activeTab === "victims" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredVictims.map((v) => (
-              <div
-                key={v.victim_id}
-                className="bg-slate-900/50 rounded-xl border border-slate-800 p-5 space-y-3 hover:border-slate-700 transition-all shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs text-cyan-400 font-mono">
-                    <HeartCrack className="w-3.5 h-3.5" />
-                    <span>Victim Record</span>
-                  </div>
-                  <span className="text-xs font-mono text-slate-500">ID #{v.victim_id}</span>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold text-slate-100">{v.name}</h3>
-                  {v.phone && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1 font-mono">
-                      <Phone className="w-3 h-3 text-slate-500" />
-                      <span>{v.phone}</span>
-                    </div>
-                  )}
-                </div>
-
-                {v.condition_notes && (
-                  <p className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
-                    {v.condition_notes}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Content Tab: Witnesses */}
-        {activeTab === "witnesses" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredWitnesses.map((w) => (
-              <div
-                key={w.witness_id}
-                className="bg-slate-900/50 rounded-xl border border-slate-800 p-5 space-y-3 hover:border-slate-700 transition-all shadow-lg"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
-                    Reliability: {w.reliability}
-                  </span>
-                  {w.is_protected && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950/80 text-indigo-400 border border-indigo-800/60">
-                      Protected Witness
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold text-slate-100">{w.name}</h3>
-                  {w.phone && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1 font-mono">
-                      <Phone className="w-3 h-3 text-slate-500" />
-                      <span>{w.phone}</span>
-                    </div>
-                  )}
-                </div>
-
-                {w.statement_summary && (
-                  <p className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded border border-slate-800/80 line-clamp-3">
-                    &ldquo;{w.statement_summary}&rdquo;
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Modal: New Suspect */}
-        {showSuspectModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-              <h3 className="text-lg font-bold text-slate-100">Register Suspect Profile</h3>
-              <form onSubmit={handleCreateSuspect} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={sFirstName}
-                      onChange={(e) => setSFirstName(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={sLastName}
-                      onChange={(e) => setSLastName(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Age (Years)</label>
-                    <input
-                      type="number"
-                      value={sAge}
-                      onChange={(e) => setSAge(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Suspicion Level</label>
-                    <select
-                      value={sSuspicion}
-                      onChange={(e) => setSSuspicion(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500"
-                    >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Distinguishing Marks / Physical Features</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Scar on left cheek, 5ft 9in"
-                    value={sSign}
-                    onChange={(e) => setSSign(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowSuspectModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-medium"
-                  >
-                    {submitting ? "Saving..." : "Register"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: New Victim */}
-        {showVictimModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-              <h3 className="text-lg font-bold text-slate-100">Record Victim Profile</h3>
-              <form onSubmit={handleCreateVictim} className="space-y-3">
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={vName}
-                    onChange={(e) => setVName(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Contact Phone</label>
-                  <input
-                    type="text"
-                    placeholder="+8801XXXXXXXXX"
-                    value={vPhone}
-                    onChange={(e) => setVPhone(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Condition / Medical Notes</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Impact notes, injuries, assistance provided..."
-                    value={vNotes}
-                    onChange={(e) => setVNotes(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowVictimModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium"
-                  >
-                    {submitting ? "Saving..." : "Record"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Modal: New Witness */}
-        {showWitnessModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-              <h3 className="text-lg font-bold text-slate-100">Record Witness Statement</h3>
-              <form onSubmit={handleCreateWitness} className="space-y-3">
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Witness Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={wName}
-                    onChange={(e) => setWName(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Contact Phone</label>
-                    <input
-                      type="text"
-                      placeholder="+8801XXXXXXXXX"
-                      value={wPhone}
-                      onChange={(e) => setWPhone(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Reliability Rating</label>
-                    <select
-                      value={wReliability}
-                      onChange={(e) => setWReliability(e.target.value)}
-                      className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
-                    >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="wProtect"
-                    checked={wProtected}
-                    onChange={(e) => setWProtected(e.target.checked)}
-                    className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <label htmlFor="wProtect" className="text-xs text-slate-300 cursor-pointer">
-                    Enable Witness Protection Protocol
-                  </label>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Sworn Statement Summary</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Eye-witness account, observations, timeline notes..."
-                    value={wStatement}
-                    onChange={(e) => setWStatement(e.target.value)}
-                    className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowWitnessModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium"
-                  >
-                    {submitting ? "Saving..." : "Record"}
-                  </button>
-                </div>
-              </form>
-            </div>
+            {/* TAB: COMPLAINANTS */}
+            {activeTab === "complainants" && (
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Complainant Name</th>
+                    <th className="py-3 px-4">Contact Coordinates</th>
+                    <th className="py-3 px-4">Primary Channel</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {filteredComplainants.map((c) => (
+                    <tr key={c.complainant_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <User className="w-4 h-4 text-slate-400" />
+                        <span>{c.name}</span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-mono">
+                        {c.contacts?.[0]?.contact_value || "Walk-in Contact"}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">
+                        Citizen Informant
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Link
+                          href="/complaints"
+                          className="text-blue-700 hover:text-blue-900 font-semibold"
+                        >
+                          View Complaints
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </div>
-    </PortalLayout>
+    </AppShell>
   );
 }

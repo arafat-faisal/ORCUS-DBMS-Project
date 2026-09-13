@@ -26,6 +26,24 @@ export interface UserProfile {
   roles: string[];
 }
 
+export interface AdminUserItem {
+  user_id: number;
+  username: string;
+  officer_id?: number;
+  officer_name?: string;
+  badge_no?: string;
+  rank?: string;
+  branch_name?: string;
+  district?: string;
+  branches?: string[];
+  branch_ids?: number[];
+  role_ids?: number[];
+  is_active: boolean;
+  last_login_at?: string;
+  failed_login_attempts: number;
+  roles: string[];
+}
+
 export interface Role {
   role_id: number;
   role_name: string;

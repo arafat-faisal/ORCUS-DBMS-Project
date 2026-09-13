@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ORCUS — Police Investigation Management System | Final Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070a12;
+      --bg-card: rgba(15, 23, 42, 0.78);
+      --bg-card-hover: rgba(30, 41, 59, 0.88);
+      --border-card: rgba(56, 189, 248, 0.18);
+      --border-highlight: rgba(56, 189, 248, 0.45);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --cyan: #06b6d4;
+      --blue: #3b82f6;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --indigo: #6366f1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      position: relative;
+    }
+
+    /* Ambient Canvas */
+    #ambient-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.65;
+    }
+
+    /* Top Progress Bar */
+    .progress-bar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      z-index: 100;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 10%;
+      background: linear-gradient(90deg, var(--cyan), var(--blue), var(--indigo));
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    /* Presentation Header */
+    .deck-header {
+      position: fixed;
+      top: 14px;
+      left: 24px;
+      right: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .deck-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .badge-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #1e3a8a, #0284c7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 16px;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.5);
+    }
+
+    .deck-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #e2e8f0;
+    }
+
+    .deck-meta {
+      font-size: 11px;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .btn-action {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #94a3b8;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-action:hover {
+      color: #ffffff;
+      border-color: var(--cyan);
+      background: rgba(14, 165, 233, 0.15);
+      box-shadow: 0 0 10px rgba(14, 165, 233, 0.25);
+    }
+
+    /* Slides Deck Container */
+    .deck-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 40px 80px;
+    }
+
+    .slide {
+      position: absolute;
+      width: calc(100% - 80px);
+      max-width: 1320px;
+      height: calc(100% - 140px);
+      max-height: 760px;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.96) translateY(20px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  visibility 0.5s;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1) translateY(0);
+    }
+
+    /* Slide Layout Components */
+    .slide-header {
+      margin-bottom: 20px;
+    }
+
+    .slide-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--cyan);
+      background: rgba(6, 182, 212, 0.12);
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      margin-bottom: 8px;
+    }
+
+    .slide-heading {
+      font-family: 'Outfit', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #ffffff 60%, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .slide-subheading {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .slide-body {
+      flex: 1;
+      display: flex;
+      gap: 24px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    /* Custom scrollbar for slide body */
+    .slide-body::-webkit-scrollbar {
+      width: 4px;
+    }
+    .slide-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 20px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-highlight);
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.4), transparent);
+    }
+
+    /* Slide 1: Title Hero Specifics */
+    .hero-slide {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 32px;
+      align-items: center;
+      height: 100%;
+    }
+
+    .hero-title-main {
+      font-family: 'Outfit', sans-serif;
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+      background: linear-gradient(135deg, #ffffff 40%, var(--cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .hero-title-sub {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: #38bdf8;
+      margin-bottom: 14px;
+      letter-spacing: 0.5px;
+    }
+
+    .hero-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      margin-bottom: 24px;
+    }
+
+    .course-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .course-badge span {
+      color: #f59e0b;
+      font-weight: 700;
+    }
+
+    .presenters-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .presenter-card {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: left;
+    }
+
+    .presenter-name {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+
+    .presenter-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--cyan);
+      margin-bottom: 4px;
+    }
+
+    .presenter-role {
+      font-size: 10px;
+      color: #94a3b8;
+      line-height: 1.3;
+    }
+
+    .hero-media-container {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(6, 182, 212, 0.2);
+      height: 100%;
+      max-height: 480px;
+    }
+
+    .hero-media-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.8s ease;
+    }
+
+    .hero-media-container:hover img {
+      transform: scale(1.03);
+    }
+
+    /* Workflow Interactive Visualization (Slide 6) */
+    .workflow-track {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .workflow-nodes-horizontal {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      position: relative;
+    }
+
+    .node-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .node-card.active, .node-card:hover {
+      border-color: var(--cyan);
+      background: rgba(14, 165, 233, 0.15);
+      box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+      transform: translateY(-4px);
+    }
+
+    .node-step-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 4px;
+    }
+
+    .node-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .node-badge {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+    }
+
+    .workflow-detail-display {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 18px 24px;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+
+    /* Bottom Control Bar */
+    .deck-footer {
+      position: fixed;
+      bottom: 14px;
+      left: 24px;
+      right: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .slide-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .slide-counter span {
+      color: #f8fafc;
+      font-weight: 700;
+    }
+
+    .nav-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-nav {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+      font-size: 16px;
+    }
+
+    .btn-nav:hover {
+      background: var(--blue);
+      border-color: var(--cyan);
+      box-shadow: 0 0 14px rgba(59, 130, 246, 0.5);
+    }
+
+    .btn-nav:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Speaker Notes Overlay */
+    .speaker-notes-drawer {
+      position: fixed;
+      bottom: 70px;
+      right: 24px;
+      width: 380px;
+      max-height: 260px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+      padding: 16px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      z-index: 90;
+      display: none;
+      overflow-y: auto;
+    }
+
+    .speaker-notes-drawer.open {
+      display: block;
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .notes-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .notes-content {
+      font-size: 12px;
+      line-height: 1.6;
+      color: #e2e8f0;
+    }
+
+    /* Key Shortcuts Pill */
+    .keyboard-guide {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .key-pill {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #94a3b8;
+    }
+
+    /* Grid layout utilities */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .stat-val { font-family: 'Outfit', sans-serif; font-size: 32px; font-weight: 800; color: #38bdf8; }
+    .stat-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* Code block */
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Animated Background Canvas -->
+  <canvas id="ambient-canvas"></canvas>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div id="progress-bar" class="progress-bar-fill"></div>
+  </div>
+
+  <!-- Header Branding -->
+  <header class="deck-header">
+    <div class="deck-brand">
+      <div class="badge-icon">O</div>
+      <div>
+        <div class="deck-title">ORCUS Investigation System</div>
+        <div class="deck-meta">DBMS Laboratory (06123228) • Summer 2026</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="btn-notes" class="btn-action" title="Toggle Speaker Notes [N]">
+        <span>📝</span> Notes
+      </button>
+      <button id="btn-fullscreen" class="btn-action" title="Toggle Fullscreen [F]">
+        <span>⛶</span> Fullscreen
+      </button>
+      <a href="/dashboard" class="btn-action" style="text-decoration:none; color:inherit;" target="_blank">
+        <span>⚡</span> Live Portal
+      </a>
+    </div>
+  </header>
+
+  <!-- Presentation Deck Slides -->
+  <main class="deck-container">
+
+    <!-- SLIDE 1: Title & Hero -->
+    <section class="slide active" data-slide="1" data-notes="Good morning/afternoon Mam. Today we are presenting ORCUS, our 3NF relational database project for criminal investigation management in Bangladesh. Presented by Md. Arafat Hossain Faisal, A.K. Md. Shakil Hossain, and Ayshee Islam Liza.">
+      <div class="hero-slide">
+        <div>
+          <div class="slide-tag">DBMS Lab Final Evaluation • Project #1</div>
+          <h1 class="hero-title-main">ORCUS</h1>
+          <div class="hero-title-sub">Organized Crime Understanding System</div>
+          <p class="hero-desc">
+            A comprehensive, 3NF-compliant relational database platform engineered to modernize criminal complaint intake, statutory FIR registration, multi-officer case management, and tamper-proof evidence custody for Bangladesh Police.
+          </p>
+
+          <div class="course-badge">
+            <span>Course:</span> 06123228 — Database Management Laboratory | <span>Target:</span> MySQL 8.0+ InnoDB
+          </div>
+
+          <div class="presenters-grid">
+            <div class="presenter-card">
+              <div class="presenter-name">Md. Arafat Hossain Faisal</div>
+              <div class="presenter-id">ID: 241400060 (Team Lead)</div>
+              <div class="presenter-role">Module 1: Relational Schema, Security, RBAC & Audit Engine</div>
+            </div>
+            <div class="presenter-card">
+              <div class="presenter-name">A.K. Md. Shakil Hossain</div>
+              <div class="presenter-id">ID: 241400043</div>
+              <div class="presenter-role">Module 2: Intake Workflows, GD, FIR & Case Lifecycles</div>
+            </div>
+            <div class="presenter-card">
+              <div class="presenter-name">Ayshee Islam Liza</div>
+              <div class="presenter-id">ID: 241400045</div>
+              <div class="presenter-role">Module 3: Participants, Geocoding & Evidence Chain of Custody</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-media-container">
+          <img src="/presentation/hero_emblem.jpg" alt="ORCUS System Emblem" />
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Problem Context -->
+    <section class="slide" data-slide="2" data-notes="Explain the crisis in current police stations: manual paper books, missing evidence during court trials, and no centralized case tracking across districts like Dhaka, Chittagong, and Sylhet.">
+      <div class="slide-header">
+        <div class="slide-tag">Problem Analysis & Motivation</div>
+        <h2 class="slide-heading">The Crisis of Manual Investigation Management</h2>
+        <div class="slide-subheading">Challenges of paper-bound Police Stations (Thanas) in Bangladesh</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2" style="width: 100%;">
+          <div class="glass-card" style="border-left: 4px solid var(--rose);">
+            <h3 style="font-size: 18px; margin-bottom: 8px; color: var(--rose);">1. Broken Chain of Custody in Trials</h3>
+            <p style="font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-bottom: 12px;">
+              Physical and digital items seized at crime scenes lack chronological tracking. If custodian handovers are unverified or timestamps are undocumented, evidence is routinely ruled <strong>inadmissible in Sessions Court</strong> under Section 9 of the Evidence Act.
+            </p>
+            <div style="font-size: 11px; font-family: 'JetBrains Mono'; color: #f43f5e; background: rgba(244, 63, 94, 0.1); padding: 6px 10px; border-radius: 4px;">
+              Impact: Acquittals of major criminal syndicates on procedural technicalities.
+            </div>
+          </div>
+
+          <div class="glass-card" style="border-left: 4px solid var(--amber);">
+            <h3 style="font-size: 18px; margin-bottom: 8px; color: var(--amber);">2. Citizen Complaint Black Hole</h3>
+            <p style="font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-bottom: 12px;">
+              Citizens filing grievances at Thanas receive handwritten slips with no digital audit trail. Complainants cannot verify whether an inquiry was launched, a GD recorded, or an FIR registered without repeated physical station visits.
+            </p>
+            <div style="font-size: 11px; font-family: 'JetBrains Mono'; color: #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 6px 10px; border-radius: 4px;">
+              Impact: Lack of transparency, public dissatisfaction, and delayed justice.
+            </div>
+          </div>
+
+          <div class="glass-card" style="border-left: 4px solid var(--blue);">
+            <h3 style="font-size: 18px; margin-bottom: 8px; color: var(--blue);">3. Information Silos Across Districts</h3>
+            <p style="font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-bottom: 12px;">
+              Trans-regional syndicates operate seamlessly between Chattogram Port, Dhaka financial centers, and border crossings in Sylhet and Rajshahi. Disconnected station records prevent detectives from correlating repeat offenders and weapon ballistics.
+            </p>
+            <div style="font-size: 11px; font-family: 'JetBrains Mono'; color: #38bdf8; background: rgba(56, 189, 248, 0.1); padding: 6px 10px; border-radius: 4px;">
+              Impact: Criminal rings exploit lack of unified relational intelligence.
+            </div>
+          </div>
+
+          <div class="glass-card" style="border-left: 4px solid var(--emerald);">
+            <h3 style="font-size: 18px; margin-bottom: 8px; color: var(--emerald);">4. The ORCUS Relational Solution</h3>
+            <p style="font-size: 13px; line-height: 1.6; color: #cbd5e1; margin-bottom: 12px;">
+              A unified 3NF schema integrating <strong>5 Strategic Police Commands</strong>, atomic reference sequence numbering (`CMP`, `GD`, `FIR`, `CAS`), role-based access control, cryptographic SHA-256 evidence hashing, and an immutable audit trail.
+            </p>
+            <div style="font-size: 11px; font-family: 'JetBrains Mono'; color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 6px 10px; border-radius: 4px;">
+              Result: Zero data redundancy, seamless multi-officer collaboration, and judicial integrity.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: System Architecture -->
+    <section class="slide" data-slide="3" data-notes="Detail the 3-tier architecture: Next.js on frontend, Go microservice on backend, and MySQL 8.0 on database. Highlight that tokens are stored in HttpOnly cookies and never exposed in browser storage.">
+      <div class="slide-header">
+        <div class="slide-tag">Engineering Specifications</div>
+        <h2 class="slide-heading">3-Tier Enterprise Architecture & Security</h2>
+        <div class="slide-subheading">Seamless decoupling of presentation, business logic, and transactional storage</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3" style="width: 100%;">
+          <!-- Tier 1 -->
+          <div class="glass-card">
+            <div style="font-family: 'JetBrains Mono'; color: var(--cyan); font-size: 12px; margin-bottom: 4px;">TIER 1 • PRESENTATION</div>
+            <h3 style="font-size: 18px; color: #ffffff; margin-bottom: 10px;">Next.js 14 App Router</h3>
+            <ul style="font-size: 12px; line-height: 1.7; color: #cbd5e1; list-style: none;">
+              <li>✔ React 18 with TypeScript strict typing</li>
+              <li>✔ Bilingual Interface (English & Bengali)</li>
+              <li>✔ Public Citizen Intake & Secure Tracking</li>
+              <li>✔ Officer Investigation Command Center</li>
+              <li>✔ Dynamic global search with multi-entity filters</li>
+              <li>✔ ZERO token storage in localStorage (XSS-safe)</li>
+            </ul>
+            <div style="margin-top: 14px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono'; color: #38bdf8;">
+              Port: 7700 • SSR + Client Hydration
+            </div>
+          </div>
+
+          <!-- Tier 2 -->
+          <div class="glass-card">
+            <div style="font-family: 'JetBrains Mono'; color: var(--blue); font-size: 12px; margin-bottom: 4px;">TIER 2 • BUSINESS LOGIC</div>
+            <h3 style="font-size: 18px; color: #ffffff; margin-bottom: 10px;">Go (Golang) Microservice</h3>
+            <ul style="font-size: 12px; line-height: 1.7; color: #cbd5e1; list-style: none;">
+              <li>✔ High-concurrency Gin Web Framework</li>
+              <li>✔ Bcrypt password hashing (Cost factor 10)</li>
+              <li>✔ Stateless JWT in secure `HttpOnly` cookies</li>
+              <li>✔ RBAC Permission Middleware (Role Gates)</li>
+              <li>✔ Atomic sequence generator (`system_sequence`)</li>
+              <li>✔ Automatic pre/post mutation `audit_log`</li>
+            </ul>
+            <div style="margin-top: 14px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono'; color: #60a5fa;">
+              Port: 5050 • Zero External Runtime Dependencies
+            </div>
+          </div>
+
+          <!-- Tier 3 -->
+          <div class="glass-card">
+            <div style="font-family: 'JetBrains Mono'; color: var(--emerald); font-size: 12px; margin-bottom: 4px;">TIER 3 • STORAGE ENGINE</div>
+            <h3 style="font-size: 18px; color: #ffffff; margin-bottom: 10px;">MySQL 8.0+ / InnoDB</h3>
+            <ul style="font-size: 12px; line-height: 1.7; color: #cbd5e1; list-style: none;">
+              <li>✔ 28 Tables Normalized to strict 3NF</li>
+              <li>✔ Strict Foreign Key Referential Integrity</li>
+              <li>✔ `ON DELETE RESTRICT` on core investigation assets</li>
+              <li>✔ Stored Views (`v_case_overview`, `v_custody`)</li>
+              <li>✔ ACID compliance preventing race conditions</li>
+              <li>✔ Character set: `utf8mb4_unicode_ci`</li>
+            </ul>
+            <div style="margin-top: 14px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono'; color: #34d399;">
+              Port: 3306 • Relational Schema `orcus_db`
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Database Modeling (3NF) -->
+    <section class="slide" data-slide="4" data-notes="Explain the mathematical foundation of 3NF: No multi-valued attributes (1NF), No partial dependencies on composite keys (2NF), and No transitive dependencies (3NF). Mention bridge tables like case_suspect and victim_evidence.">
+      <div class="slide-header">
+        <div class="slide-tag">Relational Database Theory</div>
+        <h2 class="slide-heading">Relational Schema & 3NF Normalization</h2>
+        <div class="slide-subheading">Elimination of redundancy, insertion, update, and deletion anomalies</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2" style="width: 100%;">
+          <div class="glass-card">
+            <h3 style="font-size: 16px; color: #ffffff; margin-bottom: 8px;">Normalization Proof</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px; line-height: 1.5; color: #cbd5e1;">
+              <div>
+                <strong style="color: var(--cyan);">1. First Normal Form (1NF):</strong> All attributes contain atomic values. Multi-valued contacts (phone, email) extracted into dedicated child entity `complainant_contact`.
+              </div>
+              <div>
+                <strong style="color: var(--blue);">2. Second Normal Form (2NF):</strong> All non-key attributes are fully functionally dependent on primary keys. In composite bridge tables (`case_suspect`, `case_victim`), operational roles like `role_in_crime` depend on the composite pair `(case_id, suspect_id)`.
+              </div>
+              <div>
+                <strong style="color: var(--emerald);">3. Third Normal Form (3NF):</strong> No transitive dependencies ($X \to Y \to Z$). Officer badge numbers, branch details, and user credentials reside in distinct entities, preventing cascading corruption.
+              </div>
+            </div>
+
+            <div style="margin-top: 14px; padding: 10px; background: rgba(0,0,0,0.4); border-radius: 6px; font-family: 'JetBrains Mono'; font-size: 11px; color: #94a3b8;">
+              <span style="color: var(--amber);">Total Tables:</span> 28 &nbsp;|&nbsp; 
+              <span style="color: var(--cyan);">Junction Bridges:</span> 6 &nbsp;|&nbsp; 
+              <span style="color: var(--emerald);">Audit Ledgers:</span> 5
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <h3 style="font-size: 16px; color: #ffffff; margin-bottom: 8px;">Referential Integrity & Constraints</h3>
+            <div style="font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+              <ul style="list-style: none; display: flex; flex-direction: column; gap: 8px;">
+                <li>
+                  <strong style="color: #f87171;">`ON DELETE RESTRICT`:</strong> Safeguards critical historical records. A `case` cannot be deleted if active `evidence` exists; a `branch` cannot be dropped if assigned to active officers.
+                </li>
+                <li>
+                  <strong style="color: #60a5fa;">`ON DELETE CASCADE`:</strong> Applied cleanly to transient child lookups and bridge associations (e.g. removing a case automatically drops its `case_suspect` junctions).
+                </li>
+                <li>
+                  <strong style="color: #34d399;">Gapless System Sequences:</strong> Atomic generator table (`system_sequence`) prevents race conditions and ensures tamper-evident numbering:
+                  <code style="display:block; margin-top:4px; color:var(--cyan); background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">
+                    CMP-2026-0801 • GD-DHK-2026-0012 • FIR-2026-0101 • CAS-2026-0001
+                  </code>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Team Division & Modules -->
+    <section class="slide" data-slide="5" data-notes="Present the clear division of labor among the 3 group members: Faisal handled Module 1 (Security, Auth, RBAC), Shakil handled Module 2 (Intake, GD, FIR, Cases), and Liza handled Module 3 (Participants, Geocoding, Evidence Custody).">
+      <div class="slide-header">
+        <div class="slide-tag">Academic Division of Responsibilities</div>
+        <h2 class="slide-heading">Individual Contributions & 3-Module Architecture</h2>
+        <div class="slide-subheading">Independent functional modules integrated seamlessly into a unified system</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3" style="width: 100%;">
+          <!-- Faisal -->
+          <div class="glass-card" style="border-top: 4px solid var(--cyan);">
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--cyan); margin-bottom: 4px;">MODULE 1 • LEAD ARCHITECT</div>
+            <h3 style="font-size: 17px; color: #ffffff;">Md. Arafat Hossain Faisal</h3>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: #94a3b8; margin-bottom: 12px;">ID: 241400060</div>
+            <div style="font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+              <strong>Organization, Security & Admin:</strong>
+              <ul style="margin-top: 6px; padding-left: 14px;">
+                <li>Master Relational Schema Design & 3NF</li>
+                <li>User Authentication (JWT HttpOnly, Bcrypt)</li>
+                <li>Role-Based Access Control (RBAC) Engine</li>
+                <li>Agency Branches & Regional Commands</li>
+                <li>Security Audit Logging (`audit_log`)</li>
+                <li>Root Admin Protection (`user_id = 1`)</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Shakil -->
+          <div class="glass-card" style="border-top: 4px solid var(--blue);">
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--blue); margin-bottom: 4px;">MODULE 2 • INVESTIGATION LEAD</div>
+            <h3 style="font-size: 17px; color: #ffffff;">A.K. Md. Shakil Hossain</h3>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: #94a3b8; margin-bottom: 12px;">ID: 241400043</div>
+            <div style="font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+              <strong>Investigation Intake & Lifecycles:</strong>
+              <ul style="margin-top: 6px; padding-left: 14px;">
+                <li>Citizen Complaint Intake & Public Tracking</li>
+                <li>Duty Officer Review & GD Escalations</li>
+                <li>Statutory First Information Report (FIR)</li>
+                <li>Penal Code & Cyber Security Act Sections</li>
+                <li>Case Master Dossier & Lead IO Assignments</li>
+                <li>Status Transition Timelines & Histories</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Liza -->
+          <div class="glass-card" style="border-top: 4px solid var(--emerald);">
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--emerald); margin-bottom: 4px;">MODULE 3 • FORENSICS & CUSTODY LEAD</div>
+            <h3 style="font-size: 17px; color: #ffffff;">Ayshee Islam Liza</h3>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: #94a3b8; margin-bottom: 12px;">ID: 241400045</div>
+            <div style="font-size: 12px; line-height: 1.6; color: #cbd5e1;">
+              <strong>Participants & Evidence Custody:</strong>
+              <ul style="margin-top: 6px; padding-left: 14px;">
+                <li>Criminal Participants Profiling (Suspects)</li>
+                <li>Victim Trauma Notes & Witness Statements</li>
+                <li>GIS Location Geocoding (`location`)</li>
+                <li>Physical & Digital Evidence Ingestion</li>
+                <li>Tamper-Evident Seals & SHA-256 Hashes</li>
+                <li>Multi-Hop Chain of Custody Audit Trail</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: End-to-End Workflow (Interactive & Animated) -->
+    <section class="slide" data-slide="6" data-notes="Demonstrate the complete live workflow step-by-step: Citizen Complaint -> General Diary -> FIR under Penal Code -> Case File -> Suspect & Witness Linking -> Evidence Seizure -> Chain of Custody. Click the steps to show details.">
+      <div class="slide-header">
+        <div class="slide-tag">Interactive Operational Pipeline</div>
+        <h2 class="slide-heading">The Complete Investigation Workflow</h2>
+        <div class="slide-subheading">Interactive step-through: from citizen report to judicial court exhibit</div>
+      </div>
+      <div class="slide-body">
+        <div class="workflow-track">
+          <div class="workflow-nodes-horizontal">
+            <div class="node-card active" onclick="selectWorkflowStep(1)">
+              <div class="node-step-num">STEP 01</div>
+              <div class="node-title">Complaint Intake</div>
+              <div class="node-badge">CMP-2026-0801</div>
+            </div>
+            <div class="node-card" onclick="selectWorkflowStep(2)">
+              <div class="node-step-num">STEP 02</div>
+              <div class="node-title">General Diary</div>
+              <div class="node-badge">GD-DHK-0012</div>
+            </div>
+            <div class="node-card" onclick="selectWorkflowStep(3)">
+              <div class="node-step-num">STEP 03</div>
+              <div class="node-title">Statutory FIR</div>
+              <div class="node-badge">FIR-2026-0101</div>
+            </div>
+            <div class="node-card" onclick="selectWorkflowStep(4)">
+              <div class="node-step-num">STEP 04</div>
+              <div class="node-title">Case Dossier</div>
+              <div class="node-badge">CAS-2026-0001</div>
+            </div>
+            <div class="node-card" onclick="selectWorkflowStep(5)">
+              <div class="node-step-num">STEP 05</div>
+              <div class="node-title">Evidence & Hash</div>
+              <div class="node-badge">EV-2026-0001-01</div>
+            </div>
+            <div class="node-card" onclick="selectWorkflowStep(6)">
+              <div class="node-step-num">STEP 06</div>
+              <div class="node-title">Chain of Custody</div>
+              <div class="node-badge">Court Exhibit P-1</div>
+            </div>
+          </div>
+
+          <!-- Dynamic Step Display Container -->
+          <div id="workflow-display-box" class="workflow-detail-display">
+            <div>
+              <div id="wf-step-label" style="font-family:'JetBrains Mono'; font-size:12px; color:var(--cyan); margin-bottom:4px;">STAGE 1: CITIZEN INTAKE & TRIAGE</div>
+              <h3 id="wf-step-title" style="font-size:20px; color:#ffffff; margin-bottom:8px;">Public Complaint Filing & Tracking Generation</h3>
+              <p id="wf-step-desc" style="font-size:13px; line-height:1.6; color:#cbd5e1; margin-bottom:12px;">
+                Complainant submits incident details online or at the station. The system atomically allocates a unique tracking code (`CMP-2026-0801`) and assigns it to a Duty Officer. Complainants track status transparently while internal notes remain restricted.
+              </p>
+              <div id="wf-step-meta" style="font-family:'JetBrains Mono'; font-size:11px; color:#38bdf8;">
+                Tables involved: <code>complaint</code>, <code>complainant</code>, <code>complainant_contact</code>, <code>system_sequence</code>
+              </div>
+            </div>
+            <div style="border-radius:8px; overflow:hidden; border:1px solid rgba(56,189,248,0.25); height:160px;">
+              <img id="wf-step-img" src="/presentation/workflow_visual.jpg" alt="Workflow Stage" style="width:100%; height:100%; object-fit:cover;" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Forensic Custody & Legal Admissibility -->
+    <section class="slide" data-slide="7" data-notes="Explain why Section 9 of the Evidence Act requires unbroken chain of custody. Describe how Liza's module enforces tamper seal IDs, storage lockers, and SHA-256 digital hashes.">
+      <div class="slide-header">
+        <div class="slide-tag">Forensic Integrity & Evidence Act</div>
+        <h2 class="slide-heading">Tamper-Proof Evidence & Chain of Custody</h2>
+        <div class="slide-subheading">Unbroken chronological provenance guaranteeing judicial court admissibility</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2" style="width: 100%;">
+          <div class="glass-card">
+            <h3 style="font-size: 16px; color: #ffffff; margin-bottom: 10px;">The Custody State Progression</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <span style="color: #60a5fa; font-weight: 700; font-family: 'JetBrains Mono';">01</span>
+                <div>
+                  <strong>Seizure at Crime Scene:</strong> Packaging in anti-static or ballistic container; numbered seal applied (`SEAL-DHK-0091`).
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <span style="color: var(--cyan); font-weight: 700; font-family: 'JetBrains Mono';">02</span>
+                <div>
+                  <strong>Digital SHA-256 Hashing:</strong> Raw bitstream image hashed immediately. If even 1 bit flips during analysis, the hash differs.
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <span style="color: #34d399; font-weight: 700; font-family: 'JetBrains Mono';">03</span>
+                <div>
+                  <strong>Lab & Vault Transitions:</strong> Transfer logged in `evidence_status_history` with releasing officer, accepting officer, and reason.
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <span style="color: #fbbf24; font-weight: 700; font-family: 'JetBrains Mono';">04</span>
+                <div>
+                  <strong>Court Exhibition & Trial:</strong> Formally admitted into Metropolitan Sessions Court as physical Exhibit P-1.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <h3 style="font-size: 16px; color: #ffffff; margin-bottom: 10px;">Real Sample Custody Trail (`EV-2026-0001-01`)</h3>
+            <div style="background: rgba(0,0,0,0.4); border-radius: 8px; padding: 12px; font-family: 'JetBrains Mono'; font-size: 11px; color: #cbd5e1; line-height: 1.6;">
+              <div style="color: var(--cyan); margin-bottom: 6px;">[ITEM: Encrypted 128GB SanDisk USB Flash Drive]</div>
+              <div>• Hash: <span style="color:#a7f3d0;">e3b0c44298fc1c149afbf4c...</span></div>
+              <div>• Seal: <span style="color:#fed7aa;">SEAL-DHK-0091 (Intact)</span></div>
+              <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                <div>Hop 1: Seized by Insp. Faisal -> HQ Reception</div>
+                <div>Hop 2: Transferred to Forensic Lead Liza -> Lab D1</div>
+                <div>Hop 3: Admitted into Dhaka Sessions Court -> Exhibit Safe</div>
+              </div>
+              <div style="margin-top: 8px; color: #34d399;">
+                ✔ Chain of Custody Verified: Zero Custody Gaps
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Real Demonstration Dataset -->
+    <section class="slide" data-slide="8" data-notes="Review the 5 major criminal operations loaded in the database. Mention that each has real Penal Code sections (Sec 420, 384, 395) and realistic Bangladeshi geocoding across Dhaka, Chattogram, Sylhet, and Rajshahi.">
+      <div class="slide-header">
+        <div class="slide-tag">Production-Grade Demonstration Data</div>
+        <h2 class="slide-heading">Real-World Bangladeshi Criminal Case Scenarios</h2>
+        <div class="slide-subheading">Populated with 5 comprehensive multi-branch investigations</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3" style="width: 100%;">
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan);">CAS-2026-0001</span>
+              <span style="background:rgba(239,68,68,0.2); color:#f87171; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">CRITICAL</span>
+            </div>
+            <h4 style="font-size:14px; color:#ffffff; margin-bottom:6px;">Operation Shadow Wire</h4>
+            <p style="font-size:12px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+              45M BDT Swift cyber exfiltration targeting corporate bank accounts in Motijheel.
+            </p>
+            <div style="font-size:11px; font-family:'JetBrains Mono'; color:#94a3b8;">
+              Branch: Central HQ (Dhaka)<br>
+              Sections: BPC 420, 120B, CSA 17
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan);">CAS-2026-0002</span>
+              <span style="background:rgba(245,158,11,0.2); color:#fbbf24; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">HIGH</span>
+            </div>
+            <h4 style="font-size:14px; color:#ffffff; margin-bottom:6px;">Operation Kraken</h4>
+            <p style="font-size:12px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+              Chattogram Port Terminal 3 Berth 9 container tampering & military night-vision smuggling.
+            </p>
+            <div style="font-size:11px; font-family:'JetBrains Mono'; color:#94a3b8;">
+              Branch: Port Zone (Chattogram)<br>
+              Sections: Customs Act 156, BPC 120B
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan);">CAS-2026-0003</span>
+              <span style="background:rgba(239,68,68,0.2); color:#f87171; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">CRITICAL</span>
+            </div>
+            <h4 style="font-size:14px; color:#ffffff; margin-bottom:6px;">Operation Iron Shield</h4>
+            <p style="font-size:12px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+              Armed extortion & drive-by weapon fire targeting physician executive in Gulshan.
+            </p>
+            <div style="font-family:'JetBrains Mono'; font-size:11px; color:#94a3b8;">
+              Branch: Central HQ (Dhaka)<br>
+              Sections: BPC 384, 395 (Extortion & Dacoity)
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan);">CAS-2026-0004</span>
+              <span style="background:rgba(16,185,129,0.2); color:#34d399; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">CLOSED</span>
+            </div>
+            <h4 style="font-size:14px; color:#ffffff; margin-bottom:6px;">Operation Silver Mint</h4>
+            <p style="font-size:12px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+              42.5M BDT counterfeit printing press raided in Rajshahi; intaglio steel plates seized.
+            </p>
+            <div style="font-family:'JetBrains Mono'; font-size:11px; color:#94a3b8;">
+              Branch: Northern Regional (Rajshahi)<br>
+              Status: Conviction decree achieved
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan);">CAS-2026-0005</span>
+              <span style="background:rgba(147,51,234,0.2); color:#c084fc; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">TOP SECRET</span>
+            </div>
+            <h4 style="font-size:14px; color:#ffffff; margin-bottom:6px;">Operation Black Grid</h4>
+            <p style="font-size:12px; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+              Rogue SCADA RTU intrusion at Regional Substation 4 causing municipal grid blackout.
+            </p>
+            <div style="font-family:'JetBrains Mono'; font-size:11px; color:#94a3b8;">
+              Branch: Northern Regional (Rajshahi)<br>
+              Sections: Cyber Security Act Sec 17
+            </div>
+          </div>
+
+          <div class="glass-card" style="background:rgba(14,165,233,0.1); border-color:var(--cyan);">
+            <div style="font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan); margin-bottom:6px;">DATASET SUMMARY</div>
+            <div style="font-size:12px; line-height:1.8; color:#ffffff;">
+              • <strong>5</strong> Strategic Commands<br>
+              • <strong>8</strong> Sworn Police Officers<br>
+              • <strong>9</strong> Complaints & <strong>6</strong> GDs<br>
+              • <strong>5</strong> Registered FIRs & Cases<br>
+              • <strong>6</strong> Suspects, <strong>5</strong> Victims, <strong>8</strong> Evidences
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Automated Quality Assurance -->
+    <section class="slide" data-slide="9" data-notes="Highlight our rigorous automated testing: 87 out of 87 tests passed across 5 test suites. Mention route redirects, deletion protection for root admin, and zero security flaws.">
+      <div class="slide-header">
+        <div class="slide-tag">Quality Assurance & Verification</div>
+        <h2 class="slide-heading">Automated Test Suites & Route Verification</h2>
+        <div class="slide-subheading">100% pass rate across authentication, RBAC, and end-to-end workflows</div>
+      </div>
+      <div class="slide-body">
+        <div style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
+          <div class="grid-4">
+            <div class="glass-card" style="text-align: center;">
+              <div class="stat-val" style="color: #34d399;">87 / 87</div>
+              <div class="stat-label">Tests Passing</div>
+            </div>
+            <div class="glass-card" style="text-align: center;">
+              <div class="stat-val" style="color: var(--cyan);">5</div>
+              <div class="stat-label">Automated Suites</div>
+            </div>
+            <div class="glass-card" style="text-align: center;">
+              <div class="stat-val" style="color: #60a5fa;">32</div>
+              <div class="stat-label">HTTP Routes Verified</div>
+            </div>
+            <div class="glass-card" style="text-align: center;">
+              <div class="stat-val" style="color: #f43f5e;">0</div>
+              <div class="stat-label">Security Breaches</div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <h3 style="font-size: 15px; color: #ffffff; margin-bottom: 8px;">Automated Test Suite Breakdown</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-size: 12px; color: #cbd5e1;">
+              <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <strong style="color: #38bdf8;">1. Strict Auth & Authorization (15 tests):</strong> HttpOnly cookie validation, expired session revoking, role separation, and XSS storage audit.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <strong style="color: #34d399;">2. Record Deletion Safeguards (6 tests):</strong> Root admin (`user_id = 1`) unbypassable 403 protection; cascade deletes on GD, FIR, and cases.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <strong style="color: #fbbf24;">3. Deterministic E2E Workflow (11 tests):</strong> Full automated walkthrough from citizen intake to custody handover and case closure.
+              </div>
+              <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 6px;">
+                <strong style="color: #c084fc;">4. Strict Route Verification (42 tests):</strong> Guarantees 200 OK on authenticated screens and 307 Redirect on unauthorized visitors.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: Conclusion & Live Demonstration -->
+    <section class="slide" data-slide="10" data-notes="Conclude the presentation. Invite Mam to view the live demonstration using the 1-click login buttons. Thank her and open the floor for questions.">
+      <div class="slide-header">
+        <div class="slide-tag">Academic Evaluation & Summary</div>
+        <h2 class="slide-heading">Conclusion & Live System Demonstration</h2>
+        <div class="slide-subheading">Thank you for your guidance throughout the Summer 2026 DBMS semester</div>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2" style="width: 100%; align-items: center;">
+          <div class="glass-card">
+            <h3 style="font-size: 18px; color: #ffffff; margin-bottom: 12px;">Key Project Accomplishments</h3>
+            <ul style="font-size: 13px; line-height: 1.8; color: #cbd5e1; list-style: none;">
+              <li>✔ <strong>Mathematically Sound:</strong> 28 tables fully normalized to 3NF.</li>
+              <li>✔ <strong>Judicial Reliability:</strong> Tamper-proof evidence custody with SHA-256 hashes.</li>
+              <li>✔ <strong>Bilingual & Accessible:</strong> Citizen portal supporting English and Bengali.</li>
+              <li>✔ <strong>Security Hardened:</strong> HttpOnly cookie session auth and immutable audit logs.</li>
+              <li>✔ <strong>Real Dataset:</strong> 5 realistic Bangladeshi police investigations ready for inspection.</li>
+            </ul>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+              <a href="/login" target="_blank" class="btn-action" style="text-decoration: none; padding: 10px 18px; font-size: 13px; background: var(--blue); color: #fff; border-color: var(--cyan);">
+                🚀 Launch Live Portal (1-Click Login)
+              </a>
+              <a href="/reports" target="_blank" class="btn-action" style="text-decoration: none; padding: 10px 18px; font-size: 13px;">
+                📊 Analytics Dashboard
+              </a>
+            </div>
+          </div>
+
+          <div class="glass-card" style="text-align: center; padding: 36px 20px;">
+            <div style="font-size: 48px; margin-bottom: 12px;">⚖️</div>
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 24px; color: #ffffff; margin-bottom: 6px;">ORCUS DBMS Project</h3>
+            <div style="font-size: 13px; color: var(--cyan); margin-bottom: 18px; font-family: 'JetBrains Mono';">
+              Ready for Faculty Evaluation
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; line-height: 1.6; max-width: 380px; margin: 0 auto 20px;">
+              We welcome questions on Schema Design, Normalization Proofs, SQL Triggers/Views, and Operational Lifecycles.
+            </p>
+            <div style="font-size: 11px; color: #64748b; font-family: 'JetBrains Mono';">
+              Faisal (241400060) • Shakil (241400043) • Liza (241400045)
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Speaker Notes Drawer -->
+  <aside id="notes-drawer" class="speaker-notes-drawer">
+    <div class="notes-title">
+      <span>Speaker Talking Points</span>
+      <span style="cursor: pointer;" onclick="toggleNotes()">✕</span>
+    </div>
+    <div id="notes-content" class="notes-content">
+      Welcome Mam to the ORCUS final presentation.
+    </div>
+  </aside>
+
+  <!-- Footer Navigation -->
+  <footer class="deck-footer">
+    <div class="keyboard-guide">
+      <span>Navigate:</span>
+      <span class="key-pill">←</span>
+      <span class="key-pill">→</span>
+      <span class="key-pill">Space</span>
+      <span style="margin-left: 10px;">Notes:</span>
+      <span class="key-pill">N</span>
+      <span style="margin-left: 10px;">Fullscreen:</span>
+      <span class="key-pill">F</span>
+    </div>
+
+    <div class="slide-counter">
+      Slide <span id="current-slide-num">1</span> of <span id="total-slides-num">10</span>
+    </div>
+
+    <div class="nav-buttons">
+      <button id="btn-prev" class="btn-nav" title="Previous Slide [←]">❮</button>
+      <button id="btn-next" class="btn-nav" title="Next Slide [→]">❯</button>
+    </div>
+  </footer>
+
+  <script>
+    // Slide Navigation Engine
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    let currentSlide = 1;
+
+    const currentSlideNumEl = document.getElementById('current-slide-num');
+    const totalSlidesNumEl = document.getElementById('total-slides-num');
+    const progressBar = document.getElementById('progress-bar');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const notesDrawer = document.getElementById('notes-drawer');
+    const notesContent = document.getElementById('notes-content');
+
+    totalSlidesNumEl.textContent = totalSlides;
+
+    function goToSlide(n) {
+      if (n < 1) n = 1;
+      if (n > totalSlides) n = totalSlides;
+      currentSlide = n;
+
+      slides.forEach((slide, idx) => {
+        if (idx + 1 === currentSlide) {
+          slide.classList.add('active');
+          const notes = slide.getAttribute('data-notes') || 'No speaker notes for this slide.';
+          notesContent.textContent = notes;
+        } else {
+          slide.classList.remove('active');
+        }
+      });
+
+      currentSlideNumEl.textContent = currentSlide;
+      progressBar.style.width = ((currentSlide / totalSlides) * 100) + '%';
+
+      btnPrev.disabled = (currentSlide === 1);
+      btnNext.disabled = (currentSlide === totalSlides);
+    }
+
+    btnPrev.addEventListener('click', () => goToSlide(currentSlide - 1));
+    btnNext.addEventListener('click', () => goToSlide(currentSlide + 1));
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        goToSlide(currentSlide + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        goToSlide(currentSlide - 1);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        goToSlide(1);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        goToSlide(totalSlides);
+      } else if (e.key.toLowerCase() === 'n') {
+        toggleNotes();
+      } else if (e.key.toLowerCase() === 'f') {
+        toggleFullscreen();
+      }
+    });
+
+    function toggleNotes() {
+      notesDrawer.classList.toggle('open');
+    }
+
+    document.getElementById('btn-notes').addEventListener('click', toggleNotes);
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+
+    // Workflow Step Interactivity (Slide 6)
+    const workflowSteps = {
+      1: {
+        label: "STAGE 1: CITIZEN INTAKE & TRIAGE",
+        title: "Public Complaint Filing & Tracking Generation",
+        desc: "Complainant submits incident details online or at the station. The system atomically allocates a unique tracking code (CMP-2026-0801) and assigns it to a Duty Officer. Complainants track status transparently while internal notes remain restricted.",
+        meta: "Tables involved: complaint, complainant, complainant_contact, system_sequence"
+      },
+      2: {
+        label: "STAGE 2: GENERAL DIARY (GD) ENTRY",
+        title: "Station Ledger Logging & Non-Cognizable Documentation",
+        desc: "The Duty Officer evaluates the incident under Police Regulations Bengal. If preliminary verification or inquiry is needed, a formal General Diary is approved (GD-DHK-2026-0012) with geographical jurisdiction tagging.",
+        meta: "Tables involved: gd, gd_status_history, agency_branch, officer"
+      },
+      3: {
+        label: "STAGE 3: FIRST INFORMATION REPORT (FIR)",
+        title: "Statutory Criminal Filing under CrPC Section 154",
+        desc: "When cognizable offenses are substantiated, the Officer-in-Charge elevates the file to a formal FIR (FIR-2026-0101). Specific legal sections (Bangladesh Penal Code 420, 120B, Cyber Security Act) are formally mapped.",
+        meta: "Tables involved: fir, legal_section, fir_legal_section, fir_status_history"
+      },
+      4: {
+        label: "STAGE 4: INVESTIGATION CASE DOSSIER",
+        title: "Official Case Opening & Detective IO Assignment",
+        desc: "A master investigation file is opened (CAS-2026-0001). A Lead Investigating Officer (Chief Inspector Faisal) is assigned. Mandatory status milestones (Open -> Under Investigation -> Pending Review -> Closed) are timestamped.",
+        meta: "Tables involved: case, case_assignment_history, case_status_history"
+      },
+      5: {
+        label: "STAGE 5: PARTICIPANTS & EVIDENCE ACQUISITION",
+        title: "Suspect Profiling, Witness Depositions & Digital Hashing",
+        desc: "Suspects and witnesses are relationally linked to the case with specific operational roles. Physical and digital items are seized with tamper-evident seal codes and cryptographic SHA-256 digital checksums.",
+        meta: "Tables involved: suspect, witness, case_suspect, evidence, victim_evidence"
+      },
+      6: {
+        label: "STAGE 6: MULTI-HOP CHAIN OF CUSTODY",
+        title: "Court Exhibition Admissibility & Judicial Verdict",
+        desc: "Every custody handover (Crime Scene -> Forensics Lab -> Evidence Vault -> Sessions Court) creates an immutable transaction in evidence_status_history. Admitted as Exhibit P-1 leading to judicial conviction.",
+        meta: "Tables involved: evidence_status_history, audit_log, investigation_activity"
+      }
+    };
+
+    function selectWorkflowStep(stepNum) {
+      document.querySelectorAll('.node-card').forEach((card, i) => {
+        if (i + 1 === stepNum) card.classList.add('active');
+        else card.classList.remove('active');
+      });
+
+      const data = workflowSteps[stepNum];
+      if (data) {
+        document.getElementById('wf-step-label').textContent = data.label;
+        document.getElementById('wf-step-title').textContent = data.title;
+        document.getElementById('wf-step-desc').textContent = data.desc;
+        document.getElementById('wf-step-meta').innerHTML = data.meta;
+      }
+    }
+
+    // Ambient Floating Vector Background (Canvas)
+    const canvas = document.getElementById('ambient-canvas');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    const particles = [];
+    const particleCount = 42;
+
+    for (let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        size: Math.random() * 2 + 1,
+        color: Math.random() > 0.5 ? 'rgba(6, 182, 212, ' : 'rgba(59, 130, 246, '
+      });
+    }
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < particleCount; i++) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = width;
+        if (p.x > width) p.x = 0;
+        if (p.y < 0) p.y = height;
+        if (p.y > height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + '0.45)';
+        ctx.fill();
+
+        for (let j = i + 1; j < particleCount; j++) {
+          const p2 = particles[j];
+          const dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+          if (dist < 130) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = `rgba(56, 189, 248, ${0.12 * (1 - dist / 130)})`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+
+      requestAnimationFrame(animateParticles);
+    }
+
+    animateParticles();
+    goToSlide(1);
+  </script>
+</body>
+</html>

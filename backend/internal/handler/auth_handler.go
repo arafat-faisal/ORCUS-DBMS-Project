@@ -6,6 +6,7 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -253,3 +254,196 @@ func (h *AuthHandler) ListRoles(c *gin.Context) {
 		Data:    roles,
 	})
 }
+
+// CreateRole adds a new system access role
+func (h *AuthHandler) CreateRole(c *gin.Context) {
+	var req models.CreateRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	role, err := h.authService.CreateRole(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, models.StandardResponse{
+		Success: true,
+		Message: "Role created successfully",
+		Data:    role,
+	})
+}
+
+// ListUsers lists all registered system users
+func (h *AuthHandler) ListUsers(c *gin.Context) {
+	users, err := h.authService.ListAllUsers(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	count := len(users)
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Count:   &count,
+		Data:    users,
+	})
+}
+
+// UpdateUserStatus activates or suspends a user
+func (h *AuthHandler) UpdateUserStatus(c *gin.Context) {
+	userIDStr := c.Param("id")
+	var userID uint
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID == 0 {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid user ID",
+		})
+		return
+	}
+
+	var req models.UpdateUserStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.UpdateUserStatus(c.Request.Context(), userID, req.IsActive); err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	statusMsg := "User activated successfully"
+	if !req.IsActive {
+		statusMsg = "User account suspended"
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: statusMsg,
+	})
+}
+
+// ResetPassword resets a user's password directly from admin
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	userIDStr := c.Param("id")
+	var userID uint
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID == 0 {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid user ID",
+		})
+		return
+	}
+
+	var req models.ResetUserPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.ResetUserPassword(c.Request.Context(), userID, req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "User password reset successfully",
+	})
+}
+
+// UpdateUser handles updating a user's officer link, roles, and branch assignments
+func (h *AuthHandler) UpdateUser(c *gin.Context) {
+	userIDStr := c.Param("id")
+	var userID uint
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID == 0 {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid user ID",
+		})
+		return
+	}
+
+	var req models.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	if err := h.authService.UpdateUser(c.Request.Context(), userID, &req); err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "User and branch assignments updated successfully",
+	})
+}
+
+// DeleteUser completely removes a user account (Admin only)
+func (h *AuthHandler) DeleteUser(c *gin.Context) {
+	userIDStr := c.Param("id")
+	var userID uint
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID == 0 {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid user ID",
+		})
+		return
+	}
+
+	if userID == 1 {
+		c.JSON(http.StatusForbidden, models.StandardResponse{
+			Success: false,
+			Error:   "Root administrator account cannot be deleted",
+		})
+		return
+	}
+
+	if err := h.authService.DeleteUser(c.Request.Context(), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "User account deleted successfully",
+	})
+}
+
+
+

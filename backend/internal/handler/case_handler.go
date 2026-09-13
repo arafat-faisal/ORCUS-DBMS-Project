@@ -181,3 +181,29 @@ func (h *CaseHandler) GetCaseHistory(c *gin.Context) {
 		Data:    history,
 	})
 }
+
+func (h *CaseHandler) DeleteCase(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid case ID",
+		})
+		return
+	}
+
+	err = h.caseService.DeleteCase(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "Case and associated linkages deleted successfully",
+	})
+}

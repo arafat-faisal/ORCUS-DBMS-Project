@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"orcus-backend/internal/models"
@@ -29,7 +30,7 @@ func NewAuthService(authRepo *repository.AuthRepository, jwtSecret string) *Auth
 	return &AuthService{
 		authRepo:  authRepo,
 		jwtSecret: jwtSecret,
-		throttler: NewLoginThrottler(5, 15*time.Minute),
+		throttler: NewLoginThrottler(25, 5*time.Minute),
 	}
 }
 
@@ -133,3 +134,46 @@ func (s *AuthService) RegisterUser(ctx context.Context, req *models.RegisterUser
 func (s *AuthService) ListRoles(ctx context.Context) ([]models.Role, error) {
 	return s.authRepo.GetAllRoles(ctx)
 }
+
+// CreateRole adds a new RBAC role
+func (s *AuthService) CreateRole(ctx context.Context, req *models.CreateRoleRequest) (*models.Role, error) {
+	if strings.TrimSpace(req.RoleName) == "" {
+		return nil, errors.New("role name is required")
+	}
+	return s.authRepo.CreateRole(ctx, req.RoleName, req.Description)
+}
+
+// ListAllUsers returns all system users for admin management
+func (s *AuthService) ListAllUsers(ctx context.Context) ([]models.AdminUserListItem, error) {
+	return s.authRepo.GetAllUsers(ctx)
+}
+
+// UpdateUserStatus toggles user activation
+func (s *AuthService) UpdateUserStatus(ctx context.Context, userID uint, isActive bool) error {
+	return s.authRepo.UpdateUserStatus(ctx, userID, isActive)
+}
+
+// UpdateUser updates officer linking, roles, and branch assignments
+func (s *AuthService) UpdateUser(ctx context.Context, userID uint, req *models.UpdateUserRequest) error {
+	return s.authRepo.UpdateUserFull(ctx, userID, req)
+}
+
+// ResetUserPassword resets a user's password to a fresh bcrypt hash
+func (s *AuthService) ResetUserPassword(ctx context.Context, userID uint, newPassword string) error {
+	if len(newPassword) < 6 {
+		return errors.New("password must be at least 6 characters")
+	}
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+	return s.authRepo.ResetUserPassword(ctx, userID, string(hashedBytes))
+}
+
+// DeleteUser completely deletes a user and unlinks roles
+func (s *AuthService) DeleteUser(ctx context.Context, userID uint) error {
+	return s.authRepo.DeleteUser(ctx, userID)
+}
+
+
+

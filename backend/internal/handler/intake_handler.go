@@ -323,6 +323,14 @@ func (h *IntakeHandler) ConvertComplaintToGD(c *gin.Context) {
 		return
 	}
 
+	if complaint.CurrentStatus == "Converted to GD" || complaint.CurrentStatus == "Converted to FIR" {
+		c.JSON(http.StatusConflict, models.StandardResponse{
+			Success: false,
+			Error:   "Complaint has already been converted and cannot be converted again",
+		})
+		return
+	}
+
 	var actingUserID *uint
 	if val, ok := c.Get("user_id"); ok {
 		if uid, valid := val.(uint); valid {
@@ -562,6 +570,14 @@ func (h *IntakeHandler) ConvertComplaintToFIR(c *gin.Context) {
 		return
 	}
 
+	if complaint.CurrentStatus == "Converted to FIR" || complaint.CurrentStatus == "Converted to GD" {
+		c.JSON(http.StatusConflict, models.StandardResponse{
+			Success: false,
+			Error:   "Complaint has already been converted and cannot be converted again",
+		})
+		return
+	}
+
 	var actingUserID *uint
 	if val, ok := c.Get("user_id"); ok {
 		if uid, valid := val.(uint); valid {
@@ -657,5 +673,57 @@ func (h *IntakeHandler) ListLegalSections(c *gin.Context) {
 		Success: true,
 		Count:   &count,
 		Data:    sections,
+	})
+}
+
+func (h *IntakeHandler) DeleteGD(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid GD ID",
+		})
+		return
+	}
+
+	err = h.intakeService.DeleteGD(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "General Diary deleted successfully",
+	})
+}
+
+func (h *IntakeHandler) DeleteFIR(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid FIR ID",
+		})
+		return
+	}
+
+	err = h.intakeService.DeleteFIR(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "FIR deleted successfully",
 	})
 }

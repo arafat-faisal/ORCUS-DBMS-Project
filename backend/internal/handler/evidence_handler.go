@@ -182,3 +182,29 @@ func (h *EvidenceHandler) GetEvidenceChainOfCustody(c *gin.Context) {
 		Data:    logs,
 	})
 }
+
+func (h *EvidenceHandler) DeleteEvidence(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid evidence ID",
+		})
+		return
+	}
+
+	err = h.evidenceService.DeleteEvidence(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "Evidence item deleted successfully",
+	})
+}

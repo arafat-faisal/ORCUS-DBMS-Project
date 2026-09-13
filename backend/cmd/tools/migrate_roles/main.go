@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -59,7 +62,11 @@ func main() {
 	}
 
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("Rahim@Public2026!"), 10)
+		pwd := os.Getenv("COMPLAINANT_RAHIM_PASSWORD")
+		if pwd == "" {
+			pwd = "P@" + base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))[:16]
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(pwd), 10)
 		if err != nil {
 			log.Fatalf("Failed to hash password: %v", err)
 		}

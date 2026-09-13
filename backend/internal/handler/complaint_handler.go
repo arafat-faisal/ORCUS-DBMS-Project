@@ -396,3 +396,29 @@ func (h *ComplaintHandler) GetTransferHistory(c *gin.Context) {
 		Data:    transfers,
 	})
 }
+
+func (h *ComplaintHandler) DeleteComplaint(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.StandardResponse{
+			Success: false,
+			Error:   "Invalid complaint ID",
+		})
+		return
+	}
+
+	err = h.complaintService.DeleteComplaint(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.StandardResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "Complaint record deleted successfully",
+	})
+}

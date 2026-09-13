@@ -2,250 +2,343 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { PortalLayout } from "@/components/layout/PortalLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
-import { FIR } from "@/lib/types";
+import { FIR, AgencyBranch } from "@/lib/types";
 import { useLocale } from "@/lib/locale";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/FeedbackStates";
 import {
-  FileSpreadsheet,
-  Search,
-  Filter,
-  Plus,
-  Clock,
-  ArrowRight,
-  Shield,
-  Building,
-  AlertOctagon,
   Scale,
+  Search,
+  Eye,
+  PlusCircle,
+  FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
+import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 
 export default function FIRListPage() {
-  const { t, formatDateTime } = useLocale();
+  const { locale, formatDateTime } = useLocale();
+
   const [firs, setFirs] = useState<FIR[]>([]);
+  const [branches, setBranches] = useState<AgencyBranch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [branchFilter, setBranchFilter] = useState<number | undefined>();
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const res = await api.listFIRs();
-      if (res.success && res.data) {
-        setFirs(res.data);
+  // Delete FIR state
+  const [deleteModalFIR, setDeleteModalFIR] = useState<FIR | null>(null);
+  const [deletingFIR, setDeletingFIR] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteFIR = async () => {
+    if (!deleteModalFIR) return;
+    setDeletingFIR(true);
+    setDeleteError(null);
+    try {
+      const res = await api.deleteFIR(deleteModalFIR.fir_id);
+      if (res.success) {
+        setFirs((prev) => prev.filter((f) => f.fir_id !== deleteModalFIR.fir_id));
+        setDeleteModalFIR(null);
+      } else {
+        setDeleteError(res.error || "Failed to delete FIR record.");
       }
+    } catch {
+      setDeleteError("Network error while deleting FIR record.");
+    } finally {
+      setDeletingFIR(false);
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [firRes, branchRes] = await Promise.all([
+        api.listFIRs(),
+        api.listBranches(),
+      ]);
+
+      if (firRes.success && firRes.data) {
+        setFirs(firRes.data);
+      } else {
+        setError(firRes.error || "Failed to load First Information Reports.");
+      }
+      if (branchRes.success && branchRes.data) {
+        setBranches(branchRes.data);
+      }
+    } catch {
+      setError("Network error while communicating with ORCUS API.");
+    } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
   const filteredFIRs = firs.filter((fir) => {
     const matchesSearch =
+      !searchTerm ||
       (fir.fir_number && fir.fir_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (fir.crime_category && fir.crime_category.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (fir.complainant_name && fir.complainant_name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesCat = categoryFilter === "ALL" || fir.crime_category === categoryFilter;
-    const matchesStatus = statusFilter === "ALL" || fir.current_status === statusFilter;
-    return matchesSearch && matchesCat && matchesStatus;
+    const matchesCategory = categoryFilter === "ALL" || fir.crime_category === categoryFilter;
+    const matchesBranch = !branchFilter || fir.branch_id === branchFilter;
+    return matchesSearch && matchesCategory && matchesBranch;
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Case Opened":
-        return "bg-emerald-950/70 text-emerald-400 border-emerald-800/60";
-      case "Investigation Pending":
-      case "Registered":
-        return "bg-cyan-950/70 text-cyan-400 border-cyan-800/60";
-      case "Verified":
-        return "bg-indigo-950/70 text-indigo-400 border-indigo-800/60";
-      case "Submitted for Verification":
-        return "bg-amber-950/70 text-amber-400 border-amber-800/60";
-      case "Closed":
-      case "Archived":
-        return "bg-slate-800 text-slate-300 border-slate-700";
-      default:
-        return "bg-slate-900 text-slate-400 border-slate-800";
-    }
-  };
+  const paginatedFIRs = filteredFIRs.slice((page - 1) * pageSize, page * pageSize);
+
+  const categories = Array.from(new Set(firs.map((f) => f.crime_category).filter(Boolean)));
 
   return (
-    <PortalLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-rose-400 uppercase tracking-wider mb-1">
-              <Shield className="w-4 h-4" />
-              <span>Cognizable Offenses &bull; Section 154 CrPC</span>
+    <AppShell>
+      <div className="space-y-6 max-w-7xl mx-auto pb-10">
+        <PageHeader
+          title={locale === "bn" ? "প্রথম তথ্য বিবরণী (First Information Report - FIR)" : "First Information Reports (FIR)"}
+          description={
+            locale === "bn"
+              ? "একাডেমিক প্রোটোটাইপ — কাল্পনিক প্রদর্শনীর উদ্দেশ্যে সংরক্ষিত এজাহার রেজিস্ট্রি।"
+              : "Academic prototype registry of demonstrative criminal complaints and FIR records (fictional demonstration)."
+          }
+          breadcrumbs={[
+            { label: "ORCUS", href: "/dashboard" },
+            { label: locale === "bn" ? "ইনটেক" : "Intake" },
+            { label: "First Information Report (FIR)" },
+          ]}
+          action={
+            <div className="flex items-center gap-2">
+              <Link
+                href="/fir/new"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>{locale === "bn" ? "নতুন এজাহার নথিভুক্ত করুন" : "Register New FIR"}</span>
+              </Link>
+              <Link
+                href="/complaints"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-xs font-semibold transition"
+              >
+                <span>{locale === "bn" ? "অভিযোগ তালিকা" : "From Complaint"}</span>
+              </Link>
             </div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
-              First Information Report (FIR) Registry
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Official station registry for cognizable criminal offenses, statutory penal sections, and judicial investigations.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/complaints/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-rose-950/40"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Lodge New Complaint / FIR</span>
-            </Link>
-          </div>
-        </div>
+          }
+        />
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
-          <div className="md:col-span-6 relative">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by FIR number, category, complainant..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-colors"
-            />
-          </div>
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={
+                  locale === "bn"
+                    ? "এজাহার নম্বর, অপরাধের ধরন বা বাদীর নাম খুঁজুন..."
+                    : "Search by FIR number, category, or informant..."
+                }
+                className="w-full bg-white border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2" />
+            </div>
 
-          <div className="md:col-span-3">
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500 transition-colors"
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
-              <option value="ALL">All Offense Categories</option>
-              <option value="Theft">Theft</option>
-              <option value="Robbery">Robbery</option>
-              <option value="Extortion">Extortion</option>
-              <option value="Fraud">Fraud</option>
-              <option value="Assault">Assault</option>
-              <option value="Homicide">Homicide</option>
-              <option value="Narcotics">Narcotics</option>
-              <option value="Cybercrime">Cybercrime</option>
+              <option value="ALL">{locale === "bn" ? "সকল অপরাধ ক্যাটাগরি" : "All Crime Categories"}</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
             </select>
-          </div>
 
-          <div className="md:col-span-3">
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-rose-500 transition-colors"
+              value={branchFilter || ""}
+              onChange={(e) => {
+                setBranchFilter(e.target.value ? Number(e.target.value) : undefined);
+                setPage(1);
+              }}
+              className="bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
-              <option value="ALL">All Statuses</option>
-              <option value="Registered">Registered</option>
-              <option value="Investigation Pending">Investigation Pending</option>
-              <option value="Case Opened">Case Opened</option>
-              <option value="Closed">Closed</option>
+              <option value="">{locale === "bn" ? "সকল থানা/শাখা" : "All Branches"}</option>
+              {branches.map((b) => (
+                <option key={b.branch_id} value={b.branch_id}>
+                  {b.branch_name} ({b.district})
+                </option>
+              ))}
             </select>
+
+            {(searchTerm || categoryFilter !== "ALL" || branchFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setCategoryFilter("ALL");
+                  setBranchFilter(undefined);
+                  setPage(1);
+                }}
+                className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-md text-xs transition"
+              >
+                Reset
+              </button>
+            )}
           </div>
         </div>
 
-        {/* List of FIRs */}
+        {/* State Render */}
         {loading ? (
-          <div className="p-12 text-center text-slate-400 bg-slate-900/30 rounded-xl border border-slate-800">
-            <div className="w-7 h-7 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <span className="text-sm">Retrieving statutory FIR records...</span>
-          </div>
+          <LoadingState message={locale === "bn" ? "এজাহার তালিকা লোড হচ্ছে..." : "Loading FIR records..."} />
+        ) : error ? (
+          <ErrorState message={error} onRetry={loadData} />
         ) : filteredFIRs.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 bg-slate-900/20 rounded-xl border border-dashed border-slate-800">
-            <AlertOctagon className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-            <p className="text-sm font-medium text-slate-400">No FIR records match your filter criteria.</p>
-            <p className="text-xs text-slate-600 mt-1">Check crime category or register a new cognizable offense.</p>
-          </div>
+          <EmptyState
+            title={locale === "bn" ? "কোনো এজাহার পাওয়া যায়নি" : "No First Information Reports found"}
+            description={
+              locale === "bn"
+                ? "নতুন নিবন্ধিত এজাহার এখানে প্রদর্শিত হবে।"
+                : "Registered FIR records will appear here."
+            }
+          />
         ) : (
-          <div className="bg-slate-900/40 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-950/80 text-xs uppercase font-mono text-slate-400 border-b border-slate-800">
-                  <tr>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">FIR Number</th>
-                    <th className="py-3 px-4">Filing Date</th>
-                    <th className="py-3 px-4">Crime Category & Sections</th>
-                    <th className="py-3 px-4">Complainant / Informant</th>
-                    <th className="py-3 px-4">Origin / GD Ref</th>
+                    <th className="py-3 px-4">Crime Category</th>
+                    <th className="py-3 px-4">Informant</th>
+                    <th className="py-3 px-4">Filed Date</th>
+                    <th className="py-3 px-4">Branch</th>
+                    <th className="py-3 px-4">Related GD</th>
                     <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredFIRs.map((fir) => (
-                    <tr key={fir.fir_id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4 font-mono font-semibold text-rose-400">
-                        <Link href={`/fir/${fir.fir_id}`} className="hover:underline">
-                          {fir.fir_number}
-                        </Link>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {paginatedFIRs.map((fir) => (
+                    <tr key={fir.fir_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-indigo-800">
+                        {fir.fir_number}
                       </td>
-                      <td className="py-3 px-4 text-xs text-slate-400 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{formatDateTime(fir.filed_date)}</span>
-                        </div>
+                      <td className="py-3 px-4 font-semibold text-slate-900">
+                        {fir.crime_category}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-200">{fir.crime_category}</div>
-                        {fir.legal_sections && fir.legal_sections.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {fir.legal_sections.slice(0, 3).map((sec) => (
-                              <span
-                                key={sec.section_id}
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700"
-                              >
-                                {sec.section_code}
-                              </span>
-                            ))}
-                            {fir.legal_sections.length > 3 && (
-                              <span className="text-[10px] text-slate-500 font-mono">
-                                +{fir.legal_sections.length - 3} more
-                              </span>
-                            )}
+                        <div className="font-medium text-slate-800">
+                          {fir.complainant_name || "State / Police Informant"}
+                        </div>
+                        {fir.complainant_phone && (
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {fir.complainant_phone}
                           </div>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-slate-300">{fir.complainant_name || "State / Police Informant"}</div>
-                        {fir.complainant_phone && (
-                          <div className="text-xs font-mono text-slate-500">{fir.complainant_phone}</div>
-                        )}
+                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                        {formatDateTime(fir.filed_date)}
                       </td>
-                      <td className="py-3 px-4 text-xs text-slate-400 font-mono">
+                      <td className="py-3 px-4 text-slate-700">
+                        {fir.branch_name || "Headquarters"}
+                      </td>
+                      <td className="py-3 px-4">
                         {fir.gd_number ? (
-                          <Link href={`/gd`} className="text-cyan-400 hover:underline">
+                          <span className="font-mono text-xs text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
                             {fir.gd_number}
-                          </Link>
+                          </span>
                         ) : (
-                          <span className="text-slate-600">Direct Intake</span>
+                          <span className="text-slate-400">Direct FIR</span>
                         )}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                            fir.current_status || "Registered"
-                          )}`}
-                        >
-                          {fir.current_status || "Registered"}
-                        </span>
+                        <StatusBadge status={fir.current_status} />
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/fir/${fir.fir_id}`}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors"
-                        >
-                          <span>Formal Dossier</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/fir/${fir.fir_id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-slate-200 hover:border-slate-300 rounded bg-slate-50 transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{locale === "bn" ? "বিস্তারিত" : "Details"}</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setDeleteModalFIR(fir);
+                              setDeleteError(null);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded bg-rose-50/60 transition"
+                            title="Delete First Information Report"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between text-xs text-slate-600">
+              <span>
+                Showing {paginatedFIRs.length} of {filteredFIRs.length} entries (Page {page})
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={page * pageSize >= filteredFIRs.length}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmModal
+          isOpen={!!deleteModalFIR}
+          title="Delete First Information Report (FIR)"
+          itemType="FIR Record"
+          itemName={deleteModalFIR ? `${deleteModalFIR.fir_number}: ${deleteModalFIR.crime_category}` : ""}
+          warningDetails="Permanently removes this FIR, unlinks related investigation cases, and removes all linked legal penal code sections and status histories."
+          isDeleting={deletingFIR}
+          error={deleteError}
+          onConfirm={handleDeleteFIR}
+          onClose={() => setDeleteModalFIR(null)}
+        />
       </div>
-    </PortalLayout>
+    </AppShell>
   );
 }

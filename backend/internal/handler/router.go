@@ -85,6 +85,9 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 		api.GET("/complaint-categories", p.ComplaintHandler.GetCategories)
 		api.POST("/public/complaints", p.ComplaintHandler.PublicSubmitComplaint)
 		api.GET("/public/complaints/track", p.ComplaintHandler.PublicTrackComplaint)
+		// Public branch directory (sanitized: branch_id, branch_name, district only)
+		// Required by the anonymous complaint form; internal /branches stays auth-protected.
+		api.GET("/public/branches", p.OrgHandler.ListBranches)
 
 		// ====================================================================
 		// Protected Endpoints (Require valid session cookie or Bearer token)
@@ -95,7 +98,13 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 			// Session & Access
 			protected.GET("/auth/me", p.AuthHandler.GetMe)
 			protected.POST("/auth/register", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.RegisterUser)
+			protected.GET("/users", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.ListUsers)
+			protected.PUT("/users/:id", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.UpdateUser)
+			protected.PUT("/users/:id/status", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.UpdateUserStatus)
+			protected.POST("/users/:id/reset-password", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.ResetPassword)
+			protected.DELETE("/users/:id", middleware.RequirePermission(auth.PermManageUsers), p.AuthHandler.DeleteUser)
 			protected.GET("/roles", p.AuthHandler.ListRoles)
+			protected.POST("/roles", middleware.RequirePermission(auth.PermManageSystem), p.AuthHandler.CreateRole)
 			protected.GET("/admin/audit-logs", middleware.RequirePermission(auth.PermViewAuditLogs), p.AuditHandler.ListAuditLogs)
 
 			// Internal Operational Group (Forbidden to Public Complainants)
@@ -121,6 +130,7 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 				ops.POST("/complaints/:id/transfer", middleware.RequireAnyPermission(auth.PermAssessComplaint, auth.PermApproveIntake), p.ComplaintHandler.TransferComplaint)
 				ops.GET("/complaints/:id/history", p.ComplaintHandler.GetStatusHistory)
 				ops.GET("/complaints/:id/transfers", p.ComplaintHandler.GetTransferHistory)
+				ops.DELETE("/complaints/:id", middleware.RequirePermission(auth.PermAssessComplaint), p.ComplaintHandler.DeleteComplaint)
 
 				// ----------------------------------------------------------------
 				// Module 2: Investigation Intake & Cases
@@ -140,6 +150,7 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 				ops.POST("/gds", middleware.RequireAnyPermission(auth.PermIntakeComplaint, auth.PermInvestigateCase), p.IntakeHandler.CreateGD)
 				ops.POST("/gds/:id/status", middleware.RequireAnyPermission(auth.PermApproveIntake, auth.PermSuperviseCase), p.IntakeHandler.UpdateGDStatus)
 				ops.POST("/gds/:id/link-fir", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.LinkGDToFIR)
+				ops.DELETE("/gds/:id", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.DeleteGD)
 
 				// FIR & Legal Sections
 				ops.GET("/firs", p.IntakeHandler.ListFIRs)
@@ -148,12 +159,14 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 				ops.POST("/firs", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.CreateFIR)
 				ops.POST("/firs/:id/status", middleware.RequireAnyPermission(auth.PermApproveIntake, auth.PermSuperviseCase), p.IntakeHandler.UpdateFIRStatus)
 				ops.GET("/legal-sections", p.IntakeHandler.ListLegalSections)
+				ops.DELETE("/firs/:id", middleware.RequirePermission(auth.PermApproveIntake), p.IntakeHandler.DeleteFIR)
 
 				ops.GET("/cases", p.CaseHandler.SearchCases)
 				ops.GET("/cases/:id", p.CaseHandler.GetCaseDossier)
 				ops.POST("/cases", middleware.RequirePermission(auth.PermManageCases), p.CaseHandler.OpenCase)
 				ops.PUT("/cases/:id/status", middleware.RequireAnyPermission(auth.PermManageCases, auth.PermSuperviseCase), p.CaseHandler.UpdateCaseStatus)
 				ops.GET("/cases/:id/history", p.CaseHandler.GetCaseHistory)
+				ops.DELETE("/cases/:id", middleware.RequirePermission(auth.PermManageCases), p.CaseHandler.DeleteCase)
 
 				// ----------------------------------------------------------------
 				// Module 3: Participants, Location & Evidence
@@ -185,6 +198,7 @@ func SetupMasterRouter(p *RouterParams) *gin.Engine {
 				ops.POST("/evidence", middleware.RequirePermission(auth.PermManageEvidence), p.EvidHandler.CreateEvidence)
 				ops.PUT("/evidence/:id/status", middleware.RequirePermission(auth.PermManageEvidence), p.EvidHandler.UpdateEvidenceStatus)
 				ops.GET("/evidence/:id/chain", p.EvidHandler.GetEvidenceChainOfCustody)
+				ops.DELETE("/evidence/:id", middleware.RequirePermission(auth.PermManageEvidence), p.EvidHandler.DeleteEvidence)
 
 				// ----------------------------------------------------------------
 				// Analytics & Views (Unified Dashboard)

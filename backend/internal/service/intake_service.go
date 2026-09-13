@@ -521,3 +521,11 @@ func (s *IntakeService) LinkGDToFIR(
 func (s *IntakeService) ListLegalSections(ctx context.Context) ([]models.LegalSection, error) {
 	return s.intakeRepo.GetAllLegalSections(ctx)
 }
+
+func (s *IntakeService) DeleteGD(ctx context.Context, gdID uint) error {
+	return s.intakeRepo.DeleteGD(ctx, gdID)
+}
+
+func (s *IntakeService) DeleteFIR(ctx context.Context, firID uint) error {
+	return s.intakeRepo.DeleteFIR(ctx, firID)
+}

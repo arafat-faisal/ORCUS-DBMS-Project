@@ -105,3 +105,7 @@ func (s *CaseService) GetCaseDossier(ctx context.Context, caseID uint) (*models.
 		EvidenceItems: evidenceItems,
 	}, nil
 }
+
+func (s *CaseService) DeleteCase(ctx context.Context, caseID uint) error {
+	return s.caseRepo.DeleteCase(ctx, caseID)
+}

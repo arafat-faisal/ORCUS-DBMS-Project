@@ -63,3 +63,7 @@ func (s *EvidenceService) UpdateEvidenceStatus(ctx context.Context, evidenceID u
 func (s *EvidenceService) GetEvidenceChainOfCustody(ctx context.Context, evidenceID uint) ([]models.EvidenceChainLog, error) {
 	return s.evidenceRepo.GetEvidenceChainOfCustody(ctx, evidenceID)
 }
+
+func (s *EvidenceService) DeleteEvidence(ctx context.Context, evidenceID uint) error {
+	return s.evidenceRepo.DeleteEvidence(ctx, evidenceID)
+}

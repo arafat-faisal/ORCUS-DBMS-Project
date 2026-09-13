@@ -20,6 +20,7 @@ type ComplaintService interface {
 	ListComplaints(filter models.ComplaintFilter) ([]models.Complaint, int, error)
 	GetStatusHistory(complaintID uint) ([]models.ComplaintStatusHistory, error)
 	GetTransferHistory(complaintID uint) ([]models.ComplaintTransferHistory, error)
+	DeleteComplaint(complaintID uint) error
 }
 
 type complaintService struct {
@@ -443,4 +444,8 @@ func (s *complaintService) GetStatusHistory(complaintID uint) ([]models.Complain
 
 func (s *complaintService) GetTransferHistory(complaintID uint) ([]models.ComplaintTransferHistory, error) {
 	return s.repo.GetTransferHistory(complaintID)
+}
+
+func (s *complaintService) DeleteComplaint(complaintID uint) error {
+	return s.repo.DeleteComplaint(complaintID)
 }

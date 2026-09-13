@@ -3,20 +3,40 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Shield,
   FileText,
   Send,
   AlertCircle,
   CheckCircle2,
   Copy,
   ArrowRight,
-  HelpCircle,
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Building,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { ComplaintCategory, AgencyBranch } from "@/lib/types";
 import { useLocale } from "@/lib/locale";
 import { LanguageSelector } from "@/components/common/LanguageSelector";
 import { EmergencyDisclaimer } from "@/components/common/EmergencyDisclaimer";
+
+const DEFAULT_CATEGORIES: ComplaintCategory[] = [
+  { category_id: 1, name_en: "Armed Robbery / Dacoity", name_bn: "সশস্ত্র ডাকাতি / রাহাজানি", description: "Cognizable offence", is_cognizable: true, created_at: "" },
+  { category_id: 2, name_en: "Cyber Harassment & Financial Fraud", name_bn: "সাইবার হয়রানি ও আর্থিক জালিয়াতি", description: "Digital fraud", is_cognizable: true, created_at: "" },
+  { category_id: 3, name_en: "Extortion & Organized Syndicate", name_bn: "চাঁদাবাজি ও সংগঠিত অপরাধ চক্র", description: "Systematic extortion", is_cognizable: true, created_at: "" },
+  { category_id: 4, name_en: "Narcotics & Smuggling", name_bn: "মাদকদ্রব্য ও চোরাচালান", description: "Illegal contraband", is_cognizable: true, created_at: "" },
+  { category_id: 5, name_en: "Property & Document Theft", name_bn: "সম্পত্তি ও গুরুত্বপূর্ণ দলিল চুরি", description: "Theft of property", is_cognizable: true, created_at: "" },
+  { category_id: 6, name_en: "Missing Person / Lost Article", name_bn: "নিখোঁজ ব্যক্তি / হারানো সাধারণ ডায়েরি", description: "Non-cognizable reporting", is_cognizable: false, created_at: "" },
+  { category_id: 7, name_en: "Public Dispute & Threat", name_bn: "পারিবারিক বা স্থানীয় বিরোধ ও হুমকি", description: "Civil dispute", is_cognizable: false, created_at: "" },
+];
+
+const DEFAULT_BRANCHES: AgencyBranch[] = [
+  { branch_id: 1, branch_name: "Central Headquarters", district: "Dhaka" },
+  { branch_id: 2, branch_name: "Port Zone Regional Office", district: "Chattogram" },
+  { branch_id: 3, branch_name: "Northeast Division Station", district: "Sylhet" },
+  { branch_id: 4, branch_name: "Northern Regional Branch", district: "Rajshahi" },
+  { branch_id: 5, branch_name: "Southwest Maritime Wing", district: "Khulna" },
+];
 
 export default function PublicComplaintNewPage() {
   const { locale } = useLocale();
@@ -29,13 +49,13 @@ export default function PublicComplaintNewPage() {
   const [incidentDate, setIncidentDate] = useState("");
   const [incidentTime, setIncidentTime] = useState("");
   const [approximateTime, setApproximateTime] = useState(false);
-  const [categoryId, setCategoryId] = useState<number | undefined>();
-  const [branchId, setBranchId] = useState<number | undefined>();
+  const [categoryId, setCategoryId] = useState<number | undefined>(1);
+  const [branchId, setBranchId] = useState<number | undefined>(1);
 
-  // Reference Data
-  const [categories, setCategories] = useState<ComplaintCategory[]>([]);
-  const [branches, setBranches] = useState<AgencyBranch[]>([]);
-  const [loadingRefs, setLoadingRefs] = useState(true);
+  // Reference Data (initialized with canonical defaults so options are immediately selectable)
+  const [categories, setCategories] = useState<ComplaintCategory[]>(DEFAULT_CATEGORIES);
+  const [branches, setBranches] = useState<AgencyBranch[]>(DEFAULT_BRANCHES);
+  const [loadingRefs, setLoadingRefs] = useState(false);
 
   // Status & Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -54,7 +74,7 @@ export default function PublicComplaintNewPage() {
       try {
         const [catRes, branchRes] = await Promise.all([
           api.getComplaintCategories(),
-          api.listBranches(),
+          api.listPublicBranches(),
         ]);
         if (catRes.success && catRes.data) setCategories(catRes.data);
         if (branchRes.success && branchRes.data) {
@@ -100,6 +120,14 @@ export default function PublicComplaintNewPage() {
       );
       return;
     }
+    if (!branchId) {
+      setErrorMessage(
+        locale === "bn"
+          ? "দায়িত্বপ্রাপ্ত থানা/শাখা নির্বাচন করুন।"
+          : "Please select the receiving police branch."
+      );
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -141,50 +169,50 @@ export default function PublicComplaintNewPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
       {/* Top Header */}
-      <header className="bg-slate-900 border-b border-slate-800">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
-              <Shield className="w-4 h-4" />
+            <div className="w-8 h-8 rounded bg-blue-700 flex items-center justify-center text-white font-bold text-sm shadow-xs">
+              OR
             </div>
             <div>
-              <span className="font-bold tracking-tight text-white">ORCUS</span>
-              <span className="text-[11px] text-slate-400 block -mt-0.5">
-                {locale === "bn" ? "নাগরিক অভিযোগ পোর্টাল" : "Citizen Complaint Portal"}
+              <span className="font-bold tracking-tight text-slate-900 block leading-tight">ORCUS</span>
+              <span className="text-[11px] text-slate-500 block leading-none">
+                {locale === "bn" ? "নাগরিক অভিযোগ দাখিল" : "Public Complaint Intake"}
               </span>
             </div>
           </Link>
+
           <div className="flex items-center gap-4">
             <Link
               href="/public/complaints/track"
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline-offset-4 hover:underline"
+              className="text-xs text-blue-700 hover:text-blue-900 font-semibold"
             >
-              {locale === "bn" ? "পূর্ববর্তী অভিযোগ ট্র্যাক করুন" : "Track Existing Complaint"}
+              {locale === "bn" ? "অভিযোগ ট্র্যাক করুন" : "Track Existing Complaint"}
             </Link>
-            <div className="h-4 w-px bg-slate-800" />
             <LanguageSelector />
           </div>
         </div>
       </header>
 
-      {/* Main Body */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8">
+      {/* Main Content */}
+      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
         <EmergencyDisclaimer />
 
         {submittedData ? (
           /* Submission Acknowledgment Card */
-          <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-6 sm:p-8 shadow-xl shadow-emerald-950/20">
-            <div className="flex items-center gap-3 text-emerald-400 mb-4">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 text-emerald-700">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-slate-900">
                   {locale === "bn"
                     ? "অভিযোগ সফলভাবে গৃহীত হয়েছে"
-                    : "Complaint Successfully Submitted"}
+                    : "Complaint Successfully Registered"}
                 </h2>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500">
                   {locale === "bn"
                     ? "আপনার অভিযোগটি প্রাথমিক পর্যালোচনার জন্য তালিকাভুক্ত হয়েছে।"
                     : "Your complaint is registered and queued for duty officer intake review."}
@@ -192,13 +220,13 @@ export default function PublicComplaintNewPage() {
               </div>
             </div>
 
-            <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-5 my-6">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold block mb-1">
-                    {locale === "bn" ? "ট্র্যাকিং রেফারেন্স কোড" : "Official Tracking Code"}
+                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                    {locale === "bn" ? "ট্র্যাকিং রেফারেন্স কোড" : "Official Tracking Reference"}
                   </span>
-                  <div className="text-2xl sm:text-3xl font-mono font-bold text-emerald-400 tracking-wider">
+                  <div className="text-2xl sm:text-3xl font-mono font-bold text-blue-800 tracking-wider">
                     {submittedData.tracking_code}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -210,288 +238,219 @@ export default function PublicComplaintNewPage() {
                 <button
                   type="button"
                   onClick={copyTrackingCode}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs transition"
                 >
-                  <Copy className="w-4 h-4 text-emerald-400" />
+                  <Copy className="w-4 h-4 text-slate-500" />
                   <span>{copied ? (locale === "bn" ? "কপি হয়েছে!" : "Copied!") : (locale === "bn" ? "কোড কপি করুন" : "Copy Code")}</span>
                 </button>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-800/80 text-xs">
-                <div>
-                  <span className="text-slate-500 block mb-0.5">{locale === "bn" ? "প্রাপক থানা/শাখা:" : "Receiving Branch:"}</span>
-                  <span className="font-semibold text-slate-200">{submittedData.branch_name}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block mb-0.5">{locale === "bn" ? "দাখিলের সময়:" : "Submission Timestamp:"}</span>
-                  <span className="font-semibold text-slate-200">{new Date(submittedData.submitted_at).toLocaleString()}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block mb-0.5">{locale === "bn" ? "বর্তমান অবস্থা:" : "Current Status:"}</span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
-                    {submittedData.current_status}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block mb-0.5">{locale === "bn" ? "দাখিলকৃত যোগাযোগ নম্বর:" : "Registered Contact:"}</span>
-                  <span className="font-semibold text-slate-200 font-mono">{contactPhone}</span>
-                </div>
-              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
               <Link
-                href={`/public/complaints/track?code=${encodeURIComponent(
-                  submittedData.tracking_code
-                )}&phone=${encodeURIComponent(contactPhone)}`}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition shadow-sm"
+                href="/"
+                className="text-xs font-semibold text-slate-600 hover:text-slate-900 inline-flex items-center gap-1.5"
               >
-                <span>{locale === "bn" ? "অনলাইনে অগ্রগতি ট্র্যাক করুন" : "Track Status Online"}</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{locale === "bn" ? "মূল পাতায় ফিরুন" : "Back to Home"}</span>
               </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  setSubmittedData(null);
-                  setTitle("");
-                  setDescription("");
-                  setComplainantName("");
-                  setContactPhone("");
-                  setIncidentDate("");
-                }}
-                className="px-5 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm transition"
+              <Link
+                href={`/public/complaints/track?code=${submittedData.tracking_code}&phone=${contactPhone}`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
               >
-                {locale === "bn" ? "নতুন অভিযোগ দাখিল করুন" : "Submit Another Complaint"}
-              </button>
+                <span>{locale === "bn" ? "স্ট্যাটাস দেখুন" : "Track Online"}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
         ) : (
-          /* Intake Form */
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-8 shadow-lg">
-            <div className="border-b border-slate-800 pb-5 mb-6">
-              <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-                <FileText className="w-6 h-6 text-emerald-500" />
-                <span>
-                  {locale === "bn"
-                    ? "অনলাইন অভিযোগ দাখিল ফরম"
-                    : "Citizen Incident & Complaint Intake Form"}
-                </span>
+          /* Complaint Intake Form */
+          <div className="bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="border-b border-slate-100 pb-4">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                {locale === "bn" ? "প্রাথমিক নাগরিক অভিযোগ ফরম" : "Citizen Incident Report Intake"}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {locale === "bn"
-                  ? "নিচের তথ্যগুলো যথাযথভাবে পূরণ করে দাখিল করুন। ডিউটি অফিসার অভিযোগ পর্যালোচনা করবেন।"
-                  : "Please complete the required details below. A designated Duty Officer will review your submission."}
+                  ? "অনলাইনে অভিযোগ দাখিল করুন। ডিউটি অফিসার অভিযোগটি পর্যালোচনা করে উপযুক্ত আইনি সিদ্ধান্ত গ্রহণ করবেন।"
+                  : "Submit an online complaint for review. A duty officer will assess jurisdiction and initiate inquiry or legal proceedings."}
               </p>
             </div>
 
             {errorMessage && (
-              <div className="mb-6 p-4 rounded-lg bg-red-950/40 border border-red-800/60 text-red-200 text-xs sm:text-sm flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold block mb-0.5">
-                    {locale === "bn" ? "ত্রুটি সংশোধন করুন:" : "Validation Error:"}
-                  </span>
-                  <span>{errorMessage}</span>
-                </div>
+              <div
+                role="alert"
+                className="p-3.5 rounded-md bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5"
+              >
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMessage}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Section 1: Citizen Contact */}
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "অভিযোগকারীর পুরো নাম" : "Complainant Full Name"}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={complainantName}
+                    onChange={(e) => setComplainantName(e.target.value)}
+                    placeholder="e.g. Md. Tariqul Islam"
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "মোবাইল নম্বর" : "Mobile Contact Number"}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="01XXXXXXXXX"
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono"
+                  />
+                </div>
+              </div>
+
               <div>
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-3">
-                  {locale === "bn" ? "১. অভিযোগকারীর পরিচয় ও যোগাযোগ" : "1. Complainant Details"}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "পূর্ণ নাম *" : "Full Name *"}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={complainantName}
-                      onChange={(e) => setComplainantName(e.target.value)}
-                      placeholder={locale === "bn" ? "যেমন: কাজী রহিম আহমেদ" : "e.g., Kazi Rahim Ahmed"}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "মোবাইল নম্বর (বাংলাদেশ) *" : "Mobile Number (Bangladesh) *"}
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={contactPhone}
-                      onChange={(e) => setContactPhone(e.target.value)}
-                      placeholder="01XXXXXXXXX"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none font-mono"
-                    />
-                    <span className="text-[11px] text-slate-500 mt-1 block">
-                      {locale === "bn"
-                        ? "ট্র্যাকিং ও ভেরিফিকেশনের জন্য ব্যবহৃত হবে (যেমন: 01712345678)"
-                        : "Used for tracking authentication (e.g. 01712345678 or +8801712345678)"}
-                    </span>
-                  </div>
-                </div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {locale === "bn" ? "অভিযোগের সংক্ষিপ্ত শিরোনাম" : "Incident Title"}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Armed robbery and extortion at local business warehouse"
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
               </div>
 
-              {/* Section 2: Incident Classification & Location */}
-              <div className="pt-4 border-t border-slate-800/80">
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-3">
-                  {locale === "bn" ? "২. অভিযোগের ধরন ও দায়িত্বপ্রাপ্ত থানা" : "2. Category & Receiving Station"}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "অভিযোগের ক্যাটাগরি" : "Incident Category"}
-                    </label>
-                    <select
-                      value={categoryId || ""}
-                      onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : undefined)}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none"
-                    >
-                      <option value="">{locale === "bn" ? "-- ক্যাটাগরি নির্বাচন করুন --" : "-- Select Category --"}</option>
-                      {categories.map((c) => (
-                        <option key={c.category_id} value={c.category_id}>
-                          {locale === "bn" ? c.name_bn || c.name_en : c.name_en}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "দায়িত্বপ্রাপ্ত থানা / ইউনিট *" : "Receiving Police Station / Unit *"}
-                    </label>
-                    <select
-                      required
-                      value={branchId || ""}
-                      onChange={(e) => setBranchId(Number(e.target.value))}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none"
-                    >
-                      {branches.map((b) => (
-                        <option key={b.branch_id} value={b.branch_id}>
-                          {locale === "bn" && b.branch_name_bn ? b.branch_name_bn : b.branch_name} ({b.branch_code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "অভিযোগের ক্যাটাগরি" : "Incident Category"}
+                  </label>
+                  <select
+                    value={categoryId || ""}
+                    onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  >
+                    <option value="">{locale === "bn" ? "ক্যাটাগরি নির্বাচন করুন" : "Select Category"}</option>
+                    {categories.map((c) => (
+                      <option key={c.category_id} value={c.category_id}>
+                        {locale === "bn" ? c.name_bn : c.name_en}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
 
-              {/* Section 3: Incident Details */}
-              <div className="pt-4 border-t border-slate-800/80">
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-3">
-                  {locale === "bn" ? "৩. ঘটনার বিবরণ ও সময়" : "3. Incident Chronology & Narrative"}
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "অভিযোগের সংক্ষিপ্ত শিরোনাম *" : "Brief Incident Title *"}
-                    </label>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "দায়িত্বপ্রাপ্ত থানা/শাখা" : "Receiving Police Branch"}
+                  </label>
+                  <select
+                    value={branchId || ""}
+                    onChange={(e) => setBranchId(e.target.value ? Number(e.target.value) : undefined)}
+                    disabled={loadingRefs}
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:opacity-60"
+                  >
+                    <option value="">
+                      {loadingRefs
+                        ? "Loading branches..."
+                        : branches.length === 0
+                          ? "No branches available"
+                          : "Select receiving branch"}
+                    </option>
+                    {branches.map((b) => (
+                      <option key={b.branch_id} value={b.branch_id}>
+                        {b.branch_name} ({b.district})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "ঘটনার তারিখ" : "Date of Incident"}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={incidentDate}
+                    onChange={(e) => setIncidentDate(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {locale === "bn" ? "ঘটনার আনুমানিক সময়" : "Time of Incident"}
+                  </label>
+                  <div className="flex items-center gap-3">
                     <input
-                      type="text"
-                      required
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder={locale === "bn" ? "যেমন: ধানমন্ডি এলাকায় মানিব্যাগ ও মোবাইল ছিনতাই" : "e.g., Unlawful extortion attempt at local retail shop"}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none"
+                      type="time"
+                      value={incidentTime}
+                      onChange={(e) => setIncidentTime(e.target.value)}
+                      className="flex-1 bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600"
                     />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">
-                        {locale === "bn" ? "ঘটনার তারিখ *" : "Incident Date *"}
-                      </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                       <input
-                        type="date"
-                        required
-                        value={incidentDate}
-                        onChange={(e) => setIncidentDate(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none"
+                        type="checkbox"
+                        checked={approximateTime}
+                        onChange={(e) => setApproximateTime(e.target.checked)}
+                        className="rounded text-blue-600"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">
-                        {locale === "bn" ? "ঘটনার সময় (ঐচ্ছিক)" : "Incident Time (Optional)"}
-                      </label>
-                      <input
-                        type="time"
-                        value={incidentTime}
-                        onChange={(e) => setIncidentTime(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center pt-6">
-                      <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                        <input
-                          type="checkbox"
-                          checked={approximateTime}
-                          onChange={(e) => setApproximateTime(e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-emerald-600 focus:ring-0"
-                        />
-                        <span>{locale === "bn" ? "আনুমানিক সময়" : "Approximate Time"}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                      {locale === "bn" ? "ঘটনার বিস্তারিত বিবরণ *" : "Comprehensive Incident Narrative *"}
+                      <span>Approximate</span>
                     </label>
-                    <textarea
-                      required
-                      rows={5}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder={
-                        locale === "bn"
-                          ? "কী ঘটেছে, কোথায় ঘটেছে, প্রত্যক্ষদর্শী বা সন্দেহভাজন কেউ থাকলে বিস্তারিত উল্লেখ করুন..."
-                          : "State the facts sequentially: what happened, exact location/landmark, suspect characteristics or vehicle details if any..."
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none leading-relaxed"
-                    />
                   </div>
                 </div>
               </div>
 
-              {/* Legal / Prototype Declaration */}
-              <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-400 space-y-1">
-                <div className="flex items-center gap-2 text-slate-300 font-semibold">
-                  <HelpCircle className="w-4 h-4 text-emerald-400" />
-                  <span>{locale === "bn" ? "আইনি ও গোপনীয়তা বিজ্ঞপ্তি" : "Declaration & Prototype Notice"}</span>
-                </div>
-                <p>
-                  {locale === "bn"
-                    ? "এই ব্যবস্থাটি কেবলমাত্র একাডেমিক প্রোটোটাইপ প্রদর্শনের উদ্দেশ্যে ব্যবহৃত হচ্ছে। কোনো সংবেদনশীল সরকারি গোপনীয় তথ্য বা আসল পরিচয়পত্র প্রবেশ করাবেন না।"
-                    : "This system is strictly for academic research demonstration. Fictional prototype test records are maintained. Do not submit sensitive real-world confidential data."}
-                </p>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {locale === "bn" ? "ঘটনার বিস্তারিত বিবরণ" : "Detailed Incident Narrative"}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Provide an objective description of the incident, place, witnesses, and persons involved..."
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-600 leading-relaxed"
+                />
               </div>
 
-              {/* Submit Button */}
-              <div className="pt-2 flex items-center justify-end gap-3">
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                 <Link
-                  href="/public/complaints/track"
-                  className="px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+                  href="/"
+                  className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 font-semibold"
                 >
-                  {locale === "bn" ? "বাতিল করুন" : "Cancel"}
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>{locale === "bn" ? "ফিরে যান" : "Back"}</span>
                 </Link>
+
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/50 text-white font-medium text-sm transition shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-md font-semibold text-xs shadow-xs transition disabled:opacity-50"
                 >
                   {submitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>{locale === "bn" ? "প্রক্রিয়াধীন..." : "Submitting..."}</span>
-                    </>
+                    <span>{locale === "bn" ? "জমা হচ্ছে..." : "Submitting..."}</span>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
+                      <Send className="w-3.5 h-3.5" />
                       <span>{locale === "bn" ? "অভিযোগ দাখিল করুন" : "Submit Complaint"}</span>
                     </>
                   )}
@@ -501,6 +460,12 @@ export default function PublicComplaintNewPage() {
           </div>
         )}
       </main>
+
+      <footer className="bg-white border-t border-slate-200 px-4 py-3 text-center text-xs text-slate-500">
+        <span>
+          Academic database prototype demonstration &bull; Fictional information only
+        </span>
+      </footer>
     </div>
   );
 }

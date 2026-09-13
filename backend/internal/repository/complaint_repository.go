@@ -23,6 +23,7 @@ type ComplaintRepository interface {
 	RecordTransfer(runner sqlx.Ext, t *models.ComplaintTransferHistory) error
 	GetTransferHistory(complaintID uint) ([]models.ComplaintTransferHistory, error)
 	GetBranchCode(branchID uint) (string, error)
+	DeleteComplaint(complaintID uint) error
 }
 
 type complaintRepository struct {
@@ -330,4 +331,41 @@ func (r *complaintRepository) GetBranchCode(branchID uint) (string, error) {
 		return "DHK-MOT", nil
 	}
 	return code, nil
+}
+
+// DeleteComplaint removes a complaint, cleans up child histories, and unlinks GD/FIR references
+func (r *complaintRepository) DeleteComplaint(complaintID uint) error {
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 1. Unlink GD and FIR references
+	if _, err := tx.Exec("UPDATE gd SET complaint_id = NULL WHERE complaint_id = ?", complaintID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("UPDATE fir SET source_complaint_id = NULL WHERE source_complaint_id = ?", complaintID); err != nil {
+		return err
+	}
+
+	// 2. Delete history records
+	if _, err := tx.Exec("DELETE FROM complaint_status_history WHERE complaint_id = ?", complaintID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM complaint_transfer_history WHERE complaint_id = ?", complaintID); err != nil {
+		return err
+	}
+
+	// 3. Delete complaint record
+	res, err := tx.Exec("DELETE FROM complaint WHERE complaint_id = ?", complaintID)
+	if err != nil {
+		return fmt.Errorf("failed to delete complaint: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil || rows == 0 {
+		return fmt.Errorf("complaint not found")
+	}
+
+	return tx.Commit()
 }

@@ -2,49 +2,67 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { PortalLayout } from "@/components/layout/PortalLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
-import { Evidence, CaseOverview, UserProfile } from "@/lib/types";
+import { Evidence, CaseOverview } from "@/lib/types";
 import { useLocale } from "@/lib/locale";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadingState, EmptyState, ErrorState } from "@/components/ui/FeedbackStates";
 import {
   Package,
   Search,
-  Filter,
-  Plus,
-  Clock,
-  ArrowRight,
-  ShieldAlert,
+  PlusCircle,
+  Eye,
   FolderLock,
-  Building,
-  CheckCircle2,
-  AlertCircle,
+  ArrowRight,
+  Trash2,
 } from "lucide-react";
+import { DeleteConfirmModal } from "@/components/ui/DeleteConfirmModal";
 
 export default function EvidenceListPage() {
-  const { t, formatDateTime } = useLocale();
+  const { locale, formatDateTime } = useLocale();
+
   const [evidenceList, setEvidenceList] = useState<Evidence[]>([]);
   const [cases, setCases] = useState<CaseOverview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
-  // New Evidence Modal
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newType, setNewType] = useState("Physical");
-  const [newLocation, setNewLocation] = useState("Central Vault - Locker A-1");
-  const [selectedCaseId, setSelectedCaseId] = useState("");
-  const [creating, setCreating] = useState(false);
+  // Delete Evidence state
+  const [deleteModalEvidence, setDeleteModalEvidence] = useState<Evidence | null>(null);
+  const [deletingEvidence, setDeletingEvidence] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const [user, setUser] = useState<UserProfile | null>(api.getUserProfile());
+  const handleDeleteEvidence = async () => {
+    if (!deleteModalEvidence) return;
+    setDeletingEvidence(true);
+    setDeleteError(null);
+    try {
+      const res = await api.deleteEvidence(deleteModalEvidence.evidence_id);
+      if (res.success) {
+        setEvidenceList((prev) => prev.filter((e) => e.evidence_id !== deleteModalEvidence.evidence_id));
+        setDeleteModalEvidence(null);
+      } else {
+        setDeleteError(res.error || "Failed to delete evidence item.");
+      }
+    } catch {
+      setDeleteError("Network error while deleting evidence item.");
+    } finally {
+      setDeletingEvidence(false);
+    }
+  };
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const [evRes, casesRes] = await Promise.all([
         api.listEvidence(),
         api.searchCases(),
@@ -52,18 +70,27 @@ export default function EvidenceListPage() {
 
       if (evRes.success && evRes.data) {
         setEvidenceList(evRes.data);
+      } else {
+        setError(evRes.error || "Failed to load evidence records.");
       }
       if (casesRes.success && casesRes.data) {
         setCases(casesRes.data);
       }
+    } catch {
+      setError("Network error while communicating with ORCUS API.");
+    } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
   const filteredEvidence = evidenceList.filter((ev) => {
     const matchesSearch =
-      (ev.title && ev.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      !searchTerm ||
+      ev.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (ev.description && ev.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (ev.storage_location && ev.storage_location.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -72,296 +99,241 @@ export default function EvidenceListPage() {
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const handleCreateEvidence = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle || !selectedCaseId) {
-      alert("Please enter title and select an active case");
-      return;
-    }
-
-    setCreating(true);
-    const res = await api.createEvidence({
-      case_id: parseInt(selectedCaseId, 10),
-      title: newTitle,
-      description: newDescription || undefined,
-      evidence_type: newType,
-      storage_location: newLocation,
-    });
-
-    if (res.success && res.data) {
-      setEvidenceList([res.data, ...evidenceList]);
-      setShowNewModal(false);
-      setNewTitle("");
-      setNewDescription("");
-      setSelectedCaseId("");
-    } else {
-      alert(res.error || "Failed to log evidence item");
-    }
-    setCreating(false);
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "In Custody":
-      case "Logged":
-        return "bg-amber-950/70 text-amber-400 border-amber-800/60";
-      case "Sent to Forensics":
-        return "bg-cyan-950/70 text-cyan-400 border-cyan-800/60";
-      case "Court Exhibit":
-        return "bg-purple-950/70 text-purple-400 border-purple-800/60";
-      case "Returned to Owner":
-      case "Disposed":
-        return "bg-slate-800 text-slate-400 border-slate-700";
-      default:
-        return "bg-slate-900 text-slate-300 border-slate-800";
-    }
-  };
+  const paginatedEvidence = filteredEvidence.slice((page - 1) * pageSize, page * pageSize);
+  const evidenceTypes = Array.from(new Set(evidenceList.map((e) => e.evidence_type).filter(Boolean)));
 
   return (
-    <PortalLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-amber-400 uppercase tracking-wider mb-1">
-              <Package className="w-4 h-4" />
-              <span>Chain of Custody &bull; Forensic Evidence Locker</span>
+    <AppShell>
+      <div className="space-y-6 max-w-7xl mx-auto pb-10">
+        <PageHeader
+          title={locale === "bn" ? "আলামত রেজিস্ট্রি (Evidence)" : "Forensic & Documentary Evidence"}
+          description={
+            locale === "bn"
+              ? "অপরাধ তদন্তে জব্দকৃত বস্তুগত, ডিজিটাল এবং জৈবিক আলামতের হেফাজত ও অবস্থান রেজিস্ট্রি।"
+              : "Register and manage physical, digital, and documentary evidence items with tamper-evident chain of custody."
+          }
+          breadcrumbs={[
+            { label: "ORCUS", href: "/dashboard" },
+            { label: locale === "bn" ? "তদন্ত" : "Investigation" },
+            { label: "Evidence" },
+          ]}
+          action={
+            <Link
+              href="/evidence/new"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>{locale === "bn" ? "নতুন আলামত নিবন্ধন" : "Register Evidence"}</span>
+            </Link>
+          }
+        />
+
+        {/* Filter Bar */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={
+                  locale === "bn"
+                    ? "আলামতের বিবরণ বা স্টোরেজ লোকেশন দিয়ে খুঁজুন..."
+                    : "Search by title, description, or storage locker..."
+                }
+                className="w-full bg-white border border-slate-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-600 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none transition"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
-              Evidence Vault & Custody Ledger
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Strictly audited, tamper-evident repository for physical, digital, forensic, and ballistic evidence.
-            </p>
-          </div>
 
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-amber-950/40"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Secure New Evidence Item</span>
-          </button>
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
-          <div className="md:col-span-6 relative">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by evidence title, description, storage vault..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
-            />
-          </div>
-
-          <div className="md:col-span-3">
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500 transition-colors"
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
-              <option value="ALL">All Evidence Types</option>
-              <option value="Physical">Physical / Material</option>
-              <option value="Digital">Digital / Electronics</option>
-              <option value="Biological">Biological / Forensic</option>
-              <option value="Weapon">Weapon / Ballistics</option>
-              <option value="Document">Document / Paper</option>
+              <option value="ALL">{locale === "bn" ? "সকল ধরন (All Types)" : "All Evidence Types"}</option>
+              {evidenceTypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
             </select>
-          </div>
 
-          <div className="md:col-span-3">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500 transition-colors"
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
-              <option value="ALL">All Custody Statuses</option>
-              <option value="Logged">Logged</option>
-              <option value="In Custody">In Custody</option>
-              <option value="Sent to Forensics">Sent to Forensics</option>
-              <option value="Court Exhibit">Court Exhibit</option>
-              <option value="Returned to Owner">Returned to Owner</option>
+              <option value="ALL">{locale === "bn" ? "সকল স্থিতি (Status)" : "All Custody Statuses"}</option>
+              <option value="Collected">Collected</option>
+              <option value="Stored in Vault">Stored in Vault</option>
+              <option value="In Lab Analysis">In Lab Analysis</option>
+              <option value="Presented in Court">Presented in Court</option>
+              <option value="Archived">Archived</option>
               <option value="Disposed">Disposed</option>
             </select>
+
+            {(searchTerm || typeFilter !== "ALL" || statusFilter !== "ALL") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setTypeFilter("ALL");
+                  setStatusFilter("ALL");
+                  setPage(1);
+                }}
+                className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-md text-xs transition"
+              >
+                Reset
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Evidence Table */}
+        {/* State Render */}
         {loading ? (
-          <div className="p-12 text-center text-slate-400 bg-slate-900/30 rounded-xl border border-slate-800">
-            <div className="w-7 h-7 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <span className="text-sm">Accessing evidence vault ledger...</span>
-          </div>
+          <LoadingState message={locale === "bn" ? "আলামত রেজিস্ট্রি লোড হচ্ছে..." : "Loading evidence inventory..."} />
+        ) : error ? (
+          <ErrorState message={error} onRetry={loadData} />
         ) : filteredEvidence.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 bg-slate-900/20 rounded-xl border border-dashed border-slate-800">
-            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-            <p className="text-sm font-medium text-slate-400">No evidence items match your filter criteria.</p>
-          </div>
+          <EmptyState
+            title={locale === "bn" ? "কোনো আলামত পাওয়া যায়নি" : "No evidence records found"}
+            description={
+              locale === "bn"
+                ? "নতুন আলামত জব্দ বা সংগ্রহ করা হলে তা এখানে প্রদর্শিত হবে।"
+                : "Seized evidence items registered under open cases will appear here."
+            }
+            action={
+              <Link
+                href="/evidence/new"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>{locale === "bn" ? "আলামত রেজিস্টার করুন" : "Register Evidence"}</span>
+              </Link>
+            }
+          />
         ) : (
-          <div className="bg-slate-900/40 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-950/80 text-xs uppercase font-mono text-slate-400 border-b border-slate-800">
-                  <tr>
-                    <th className="py-3 px-4">Item # & Description</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Associated Case</th>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Evidence Reference</th>
+                    <th className="py-3 px-4">Title</th>
+                    <th className="py-3 px-4">Type</th>
+                    <th className="py-3 px-4">Related Case</th>
                     <th className="py-3 px-4">Storage Location</th>
-                    <th className="py-3 px-4">Custody Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3 px-4">Collected Date</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredEvidence.map((ev) => (
-                    <tr key={ev.evidence_id} className="hover:bg-slate-800/40 transition-colors">
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {paginatedEvidence.map((ev) => (
+                    <tr key={ev.evidence_id} className="hover:bg-slate-50/75 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        EV-{ev.evidence_id}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-slate-900 max-w-xs truncate">
+                        {ev.title}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">
+                        {ev.evidence_type}
+                      </td>
                       <td className="py-3 px-4">
-                        <Link href={`/evidence/${ev.evidence_id}`} className="font-semibold text-slate-100 hover:text-amber-400 transition-colors">
-                          {ev.title}
-                        </Link>
-                        <div className="text-xs text-slate-400 line-clamp-1 mt-0.5">{ev.description || "No specific notes"}</div>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          {ev.evidence_type}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap text-xs font-mono">
-                        <Link href={`/cases/${ev.case_id}`} className="text-cyan-400 hover:underline">
-                          Case #{ev.case_id}
-                        </Link>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-400 font-mono">
-                        {ev.storage_location || "Central Vault"}
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusBadge(
-                            ev.status
-                          )}`}
+                        <Link
+                          href={`/cases/${ev.case_id}`}
+                          className="font-mono font-semibold text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
                         >
-                          {ev.status}
-                        </span>
+                          <span>Case #{ev.case_id}</span>
+                          <ArrowRight className="w-2.5 h-2.5" />
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {ev.storage_location || "Station Evidence Room"}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                        {formatDateTime(ev.collected_at)}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <StatusBadge status={ev.status} />
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/evidence/${ev.evidence_id}`}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
-                        >
-                          <span>Custody Chain</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/evidence/${ev.evidence_id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:text-blue-900 border border-slate-200 hover:border-slate-300 rounded bg-slate-50 transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{locale === "bn" ? "চেইন লগ" : "Chain Log"}</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setDeleteModalEvidence(ev);
+                              setDeleteError(null);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded bg-rose-50/60 transition"
+                            title="Delete evidence record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
 
-        {/* Modal: New Evidence */}
-        {showNewModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-              <div>
-                <h3 className="text-lg font-bold text-slate-100">Secure New Evidence Item</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Bind this item to an active criminal case and generate an immutable chain-of-custody genesis entry.
-                </p>
+            {/* Pagination Controls */}
+            <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between text-xs text-slate-600">
+              <span>
+                Showing {paginatedEvidence.length} of {filteredEvidence.length} items (Page {page})
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={page * pageSize >= filteredEvidence.length}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="px-2.5 py-1 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700"
+                >
+                  Next
+                </button>
               </div>
-
-              <form onSubmit={handleCreateEvidence} className="space-y-4">
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Select Case Dossier *</label>
-                  <select
-                    required
-                    value={selectedCaseId}
-                    onChange={(e) => setSelectedCaseId(e.target.value)}
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="">-- Choose Active Case --</option>
-                    {cases.map((c) => (
-                      <option key={c.case_id} value={c.case_id}>
-                        Case #{c.case_id}: {c.case_title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Evidence Title / Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 9mm Semi-Automatic Pistol w/ Magazine"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Category</label>
-                    <select
-                      value={newType}
-                      onChange={(e) => setNewType(e.target.value)}
-                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="Physical">Physical</option>
-                      <option value="Digital">Digital</option>
-                      <option value="Biological">Biological</option>
-                      <option value="Weapon">Weapon</option>
-                      <option value="Document">Document</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-mono text-slate-400 block mb-1">Storage Locker</label>
-                    <input
-                      type="text"
-                      value={newLocation}
-                      onChange={(e) => setNewLocation(e.target.value)}
-                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-mono text-slate-400 block mb-1">Description / Seizure Notes</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Serial numbers, visual characteristics, recovery condition..."
-                    value={newDescription}
-                    onChange={(e) => setNewDescription(e.target.value)}
-                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creating}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium disabled:opacity-50"
-                  >
-                    {creating ? "Locking In Vault..." : "Register Item"}
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}
+
+        {/* Delete Confirmation Modal */}
+        <DeleteConfirmModal
+          isOpen={!!deleteModalEvidence}
+          title="Delete Evidence Item"
+          itemType="Evidence Item"
+          itemName={deleteModalEvidence ? `EV-${deleteModalEvidence.evidence_id}: ${deleteModalEvidence.title}` : ""}
+          warningDetails="Permanently removes this forensic/documentary evidence item along with all historical chain-of-custody transfer logs and victim linkages."
+          isDeleting={deletingEvidence}
+          error={deleteError}
+          onConfirm={handleDeleteEvidence}
+          onClose={() => setDeleteModalEvidence(null)}
+        />
       </div>
-    </PortalLayout>
+    </AppShell>
   );
 }

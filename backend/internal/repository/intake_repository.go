@@ -848,3 +848,58 @@ func (r *IntakeRepository) GetAllLegalSections(ctx context.Context) ([]models.Le
 	}
 	return sections, nil
 }
+
+// DeleteGD removes a GD after unlinking it from FIRs and deleting its status history
+func (r *IntakeRepository) DeleteGD(ctx context.Context, gdID uint) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "UPDATE fir SET gd_id = NULL WHERE gd_id = ?", gdID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM gd_status_history WHERE gd_id = ?", gdID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, "DELETE FROM gd WHERE gd_id = ?", gdID)
+	if err != nil {
+		return fmt.Errorf("failed to delete gd: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil || rows == 0 {
+		return errors.New("gd not found")
+	}
+
+	return tx.Commit()
+}
+
+// DeleteFIR removes an FIR after unlinking it from cases and deleting its status history & legal sections
+func (r *IntakeRepository) DeleteFIR(ctx context.Context, firID uint) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "UPDATE `case` SET fir_id = NULL WHERE fir_id = ?", firID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM fir_legal_section WHERE fir_id = ?", firID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM fir_status_history WHERE fir_id = ?", firID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, "DELETE FROM fir WHERE fir_id = ?", firID)
+	if err != nil {
+		return fmt.Errorf("failed to delete fir: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil || rows == 0 {
+		return errors.New("fir not found")
+	}
+
+	return tx.Commit()
+}

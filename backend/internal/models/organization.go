@@ -61,6 +61,7 @@ type UserProfile struct {
 	BranchID    *uint    `db:"branch_id" json:"branch_id,omitempty"`
 	BranchName  *string  `db:"branch_name" json:"branch_name,omitempty"`
 	District    *string  `db:"district" json:"district,omitempty"`
+	Branches    []string `json:"branches"`
 	RolesConcat string   `db:"roles_concat" json:"-"`
 	Roles       []string `json:"roles"`
 }
@@ -90,6 +91,40 @@ type LoginResponse struct {
 	User  *UserProfile `json:"user"`
 }
 
+type AdminUserListItem struct {
+	UserID              uint       `db:"user_id" json:"user_id"`
+	Username            string     `db:"username" json:"username"`
+	OfficerID           *uint      `db:"officer_id" json:"officer_id,omitempty"`
+	OfficerName         *string    `db:"officer_name" json:"officer_name,omitempty"`
+	BadgeNo             *string    `db:"badge_no" json:"badge_no,omitempty"`
+	Rank                *string    `db:"rank" json:"rank,omitempty"`
+	BranchID            *uint      `db:"branch_id" json:"branch_id,omitempty"`
+	BranchName          *string    `db:"branch_name" json:"branch_name,omitempty"`
+	District            *string    `db:"district" json:"district,omitempty"`
+	BranchesConcat      string     `db:"branches_concat" json:"-"`
+	Branches            []string   `json:"branches"`
+	BranchIDs           []uint     `json:"branch_ids"`
+	RoleIDs             []uint     `json:"role_ids"`
+	IsActive            bool       `db:"is_active" json:"is_active"`
+	LastLoginAt         *time.Time `db:"last_login_at" json:"last_login_at,omitempty"`
+	FailedLoginAttempts int        `db:"failed_login_attempts" json:"failed_login_attempts"`
+	RolesConcat         string     `db:"roles_concat" json:"-"`
+	Roles               []string   `json:"roles"`
+}
+
+type CreateRoleRequest struct {
+	RoleName    string `json:"role_name" binding:"required,min=3,max=50"`
+	Description string `json:"description" binding:"max=255"`
+}
+
+type UpdateUserStatusRequest struct {
+	IsActive bool `json:"is_active"`
+}
+
+type ResetUserPasswordRequest struct {
+	NewPassword string `json:"new_password" binding:"required,min=6"`
+}
+
 type RegisterUserRequest struct {
 	Username  string `json:"username" binding:"required,min=3,max=50"`
 	Password  string `json:"password" binding:"required,min=6"`
@@ -109,6 +144,13 @@ type CreateOfficerRequest struct {
 	Rank      string `json:"rank" binding:"required,max=50"`
 	BranchID  uint   `json:"branch_id" binding:"required"`
 }
+
+type UpdateUserRequest struct {
+	OfficerID *uint  `json:"officer_id"`
+	RoleIDs   []uint `json:"role_ids"`
+	BranchIDs []uint `json:"branch_ids"`
+}
+
 
 type UserClaims struct {
 	UserID    uint      `json:"user_id"`

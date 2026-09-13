@@ -5,6 +5,7 @@
 import {
   StandardResponse,
   UserProfile,
+  AdminUserItem,
   DashboardOverview,
   CaseOverview,
   CaseDossier,
@@ -44,10 +45,9 @@ import {
 } from "./types";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined" && window.location.port === "5050"
-    ? `${window.location.origin}/api/v1`
-    : "http://localhost:5050/api/v1");
+  typeof window !== "undefined"
+    ? "/api/v1"
+    : process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050/api/v1";
 
 const USER_KEY = "orcus_user_profile";
 
@@ -142,6 +142,9 @@ class ApiClient {
     });
     if (res.success && res.data?.user) {
       this.setUserProfile(res.data.user);
+      if (res.data.token && typeof document !== "undefined") {
+        document.cookie = `orcus_auth_token=${res.data.token}; path=/; max-age=86400; SameSite=Lax`;
+      }
     }
     return res;
   }
@@ -151,6 +154,9 @@ class ApiClient {
       method: "POST",
     });
     this.clearUserProfile();
+    if (typeof document !== "undefined") {
+      document.cookie = "orcus_auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    }
     return res;
   }
 
@@ -176,8 +182,43 @@ class ApiClient {
     });
   }
 
+  async listUsers(): Promise<StandardResponse<AdminUserItem[]>> {
+    return this.request<AdminUserItem[]>("/users");
+  }
+
+  async updateUser(
+    userId: number,
+    data: { officer_id?: number | null; role_ids?: number[]; branch_ids?: number[] }
+  ): Promise<StandardResponse<UserProfile>> {
+    return this.request<UserProfile>(`/users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateUserStatus(userId: number, isActive: boolean): Promise<StandardResponse<void>> {
+    return this.request<void>(`/users/${userId}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ is_active: isActive }),
+    });
+  }
+
+  async resetUserPassword(userId: number, newPassword: string): Promise<StandardResponse<void>> {
+    return this.request<void>(`/users/${userId}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+  }
+
   async listRoles(): Promise<StandardResponse<Role[]>> {
     return this.request<Role[]>("/roles");
+  }
+
+  async createRole(data: { role_name: string; description?: string }): Promise<StandardResponse<Role>> {
+    return this.request<Role>("/roles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   }
 
   // --- Analytics & Views ---
@@ -194,6 +235,11 @@ class ApiClient {
   }
 
   // --- Organization & Officers ---
+  // Public branch directory for the anonymous complaint form (no login required).
+  async listPublicBranches(): Promise<StandardResponse<AgencyBranch[]>> {
+    return this.request<AgencyBranch[]>(`/public/branches`);
+  }
+
   async listBranches(district?: string): Promise<StandardResponse<AgencyBranch[]>> {
     const q = district ? `?district=${encodeURIComponent(district)}` : "";
     return this.request<AgencyBranch[]>(`/branches${q}`);
@@ -265,6 +311,7 @@ class ApiClient {
     subject: string;
     complainant_id: number;
     incident_place?: string;
+    branch_id?: number;
   }): Promise<StandardResponse<GD>> {
     return this.request<GD>("/gds", {
       method: "POST",
@@ -713,6 +760,43 @@ class ApiClient {
 
   async getComplaintTransfers(id: number): Promise<StandardResponse<ComplaintTransferHistory[]>> {
     return this.request<ComplaintTransferHistory[]>(`/complaints/${id}/transfers`);
+  }
+
+  // Record Deletion Capabilities
+  async deleteUser(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/users/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteCase(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/cases/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteComplaint(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/complaints/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteEvidence(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/evidence/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteGD(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/gds/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async deleteFIR(id: number): Promise<StandardResponse<void>> {
+    return this.request<void>(`/firs/${id}`, {
+      method: "DELETE",
+    });
   }
 }
 

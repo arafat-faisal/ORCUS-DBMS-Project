@@ -2,351 +2,482 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { PortalLayout } from "@/components/layout/PortalLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
 import {
   DashboardOverview,
-  CasePipeline,
   CaseOverview,
   Complaint,
   FIR,
   GD,
-  UserProfile,
+  Evidence,
 } from "@/lib/types";
 import { useLocale } from "@/lib/locale";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { WorkflowStepper } from "@/components/ui/WorkflowStepper";
+import { LoadingState } from "@/components/ui/FeedbackStates";
 import {
-  LayoutDashboard,
-  FolderLock,
   FileText,
   FileSpreadsheet,
+  Scale,
+  FolderLock,
   Package,
-  Shield,
   Clock,
   ArrowRight,
-  TrendingUp,
   AlertCircle,
-  Plus,
-  Users,
+  PlusCircle,
   CheckCircle2,
-  Building,
-  Scale,
+  ShieldAlert,
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { t, formatDateTime } = useLocale();
+  const { locale, formatDateTime } = useLocale();
+
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [pipeline, setPipeline] = useState<CasePipeline[]>([]);
-  const [recentCases, setRecentCases] = useState<CaseOverview[]>([]);
-  const [recentComplaints, setRecentComplaints] = useState<Complaint[]>([]);
-  const [recentFIRs, setRecentFIRs] = useState<FIR[]>([]);
-  const [recentGDs, setRecentGDs] = useState<GD[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [gds, setGds] = useState<GD[]>([]);
+  const [firs, setFirs] = useState<FIR[]>([]);
+  const [cases, setCases] = useState<CaseOverview[]>([]);
+  const [evidenceList, setEvidenceList] = useState<Evidence[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<UserProfile | null>(api.getUserProfile());
 
   useEffect(() => {
-    async function loadDashboardData() {
+    async function loadDashboard() {
       setLoading(true);
-      const [ovRes, pipeRes, casesRes, compRes, firRes, gdRes] = await Promise.all([
-        api.getDashboardOverview(),
-        api.getCasePipeline(),
-        api.searchCases(),
-        api.listComplaints(),
-        api.listFIRs(),
-        api.listGDs(),
-      ]);
+      try {
+        const [ovRes, compRes, gdRes, firRes, caseRes, evRes] = await Promise.all([
+          api.getDashboardOverview(),
+          api.listComplaints({ page_size: 10 }),
+          api.listGDs(),
+          api.listFIRs(),
+          api.searchCases(),
+          api.listEvidence(),
+        ]);
 
-      if (ovRes.success && ovRes.data) setOverview(ovRes.data);
-      if (pipeRes.success && pipeRes.data) setPipeline(pipeRes.data);
-      if (casesRes.success && casesRes.data) setRecentCases(casesRes.data.slice(0, 5));
-      if (compRes.success && compRes.data) setRecentComplaints(compRes.data.slice(0, 5));
-      if (firRes.success && firRes.data) setRecentFIRs(firRes.data.slice(0, 5));
-      if (gdRes.success && gdRes.data) setRecentGDs(gdRes.data.slice(0, 5));
-
-      setLoading(false);
+        if (ovRes.success && ovRes.data) setOverview(ovRes.data);
+        if (compRes.success && compRes.data) setComplaints(compRes.data);
+        if (gdRes.success && gdRes.data) setGds(gdRes.data);
+        if (firRes.success && firRes.data) setFirs(firRes.data);
+        if (caseRes.success && caseRes.data) setCases(caseRes.data);
+        if (evRes.success && evRes.data) setEvidenceList(evRes.data);
+      } catch (err) {
+        console.error("Error loading dashboard data", err);
+      } finally {
+        setLoading(false);
+      }
     }
-    loadDashboardData();
+    loadDashboard();
   }, []);
 
+  // Compute summary values from real database responses
+  const pendingComplaintsCount = complaints.filter(
+    (c) => c.current_status === "Submitted" || c.current_status === "Under Review"
+  ).length;
+
+  const registeredGDsCount = gds.length;
+  const registeredFIRsCount = firs.length;
+  const activeCasesCount =
+    overview?.active_cases_count ??
+    cases.filter((c) => c.case_status === "Open" || c.case_status === "Under Investigation").length;
+  const evidenceCount = overview?.evidence_count ?? evidenceList.length;
+  const casesAwaitingReviewCount = cases.filter(
+    (c) => c.case_status === "Pending Review"
+  ).length;
+
+  // Compute status breakdown for real cases
+  const caseStatusCounts = cases.reduce((acc, c) => {
+    const status = c.case_status || c.status || "Unknown";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const casesNeedingAttention = cases.filter(
+    (c) => c.case_status === "Pending Review" || c.case_status === "Reopened"
+  );
+
   return (
-    <PortalLayout>
-      <div className="space-y-8 max-w-7xl mx-auto pb-12">
-        {/* Welcome / Identity Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 uppercase tracking-wider mb-1">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span>ORCUS &bull; Command & Investigation Headquarters</span>
-            </div>
-            <h1 className="text-3xl font-black text-slate-100 tracking-tight">
-              Operational Command Dashboard
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">
-              Real-time situational awareness, case pipeline clearance metrics, and forensic evidence tracking.
-            </p>
-          </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex items-center flex-wrap gap-2.5">
-            <Link
-              href="/complaints/new"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-emerald-950/40"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Intake Complaint</span>
-            </Link>
-            <Link
-              href="/gd"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-cyan-950/40"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>General Diary</span>
-            </Link>
-            <Link
-              href="/fir"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-rose-950/40"
-            >
-              <Scale className="w-3.5 h-3.5" />
-              <span>FIR Register</span>
-            </Link>
-            <Link
-              href="/cases?action=new"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-lg shadow-indigo-950/40"
-            >
-              <FolderLock className="w-3.5 h-3.5" />
-              <span>Open Case</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Live Metrics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Active Cases */}
-          <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-cyan-500/50 transition-all">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-mono uppercase">Active Cases</span>
-              <FolderLock className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="text-3xl font-black font-mono text-slate-100">
-              {overview?.total_cases_count || recentCases.length || 0}
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-cyan-400 font-mono">
-              <span>{overview?.active_cases_count || 0} Under Investigation</span>
-            </div>
-          </div>
-
-          {/* Complaints Pending */}
-          <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-emerald-500/50 transition-all">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-mono uppercase">Citizen Complaints</span>
-              <FileText className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-3xl font-black font-mono text-slate-100">
-              {recentComplaints.length}
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono">
-              <Link href="/complaints" className="hover:underline">
-                View Intake Queue &rarr;
+    <AppShell>
+      <div className="space-y-6 max-w-7xl mx-auto pb-10">
+        <PageHeader
+          title={locale === "bn" ? "ড্যাশবোর্ড" : "Dashboard"}
+          description={
+            locale === "bn"
+              ? "অভিযোগ গ্রহণ, তদন্ত ব্যবস্থাপনা, দায়িত্ব বণ্টন এবং আলামত সংরক্ষণের সার্বিক চিত্র।"
+              : "Overview of complaint intake, investigations, assignments, and evidence."
+          }
+          breadcrumbs={[
+            { label: "ORCUS", href: "/dashboard" },
+            { label: locale === "bn" ? "ড্যাশবোর্ড" : "Dashboard" },
+          ]}
+          action={
+            <div className="flex items-center gap-2">
+              <Link
+                href="/complaints/new"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-semibold shadow-xs transition"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>{locale === "bn" ? "নতুন অভিযোগ" : "Intake Complaint"}</span>
               </Link>
             </div>
-          </div>
+          }
+        />
 
-          {/* FIRs Registered */}
-          <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-rose-500/50 transition-all">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-mono uppercase">Registered FIRs</span>
-              <Shield className="w-4 h-4 text-rose-400" />
-            </div>
-            <div className="text-3xl font-black font-mono text-slate-100">
-              {recentFIRs.length}
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-rose-400 font-mono">
-              <span>CrPC Section 154 Offenses</span>
-            </div>
-          </div>
-
-          {/* Evidence Vault */}
-          <div className="bg-slate-900/60 p-5 rounded-xl border border-slate-800 space-y-2 relative overflow-hidden group hover:border-amber-500/50 transition-all">
-            <div className="flex items-center justify-between text-slate-400">
-              <span className="text-xs font-mono uppercase">Evidence In Vault</span>
-              <Package className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-3xl font-black font-mono text-slate-100">
-              {overview?.evidence_count || 14}
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-amber-400 font-mono">
-              <Link href="/evidence" className="hover:underline">
-                Tamper-Evident Chain &rarr;
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Dual Column Feeds */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent FIRs / High-Priority Incidents */}
-          <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-rose-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-200">
-                  Recent First Information Reports (FIR)
-                </h2>
+        {loading ? (
+          <LoadingState message={locale === "bn" ? "তথ্য লোড হচ্ছে..." : "Loading system dashboard metrics..."} />
+        ) : (
+          <>
+            {/* Section 1: Six Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+              {/* 1. Pending Complaints */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "অপেক্ষমাণ অভিযোগ" : "Pending Complaints"}
+                  </span>
+                  <FileText className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {complaints.length > 0 ? pendingComplaintsCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "পর্যালোচনাধীন রয়েছে" : "Awaiting initial assessment"}
+                </div>
               </div>
-              <Link href="/fir" className="text-xs text-rose-400 hover:underline">
-                View All &rarr;
-              </Link>
+
+              {/* 2. Registered GDs */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "নিবন্ধিত জিডি" : "Registered GDs"}
+                  </span>
+                  <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {gds.length > 0 ? registeredGDsCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "সাধারণ ডায়েরি এন্ট্রি" : "General Diary entries"}
+                </div>
+              </div>
+
+              {/* 3. Registered FIRs */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "দায়েরকৃত এজাহার (FIR)" : "Registered FIRs"}
+                  </span>
+                  <Scale className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {firs.length > 0 ? registeredFIRsCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "নিবন্ধিত এজাহারসমূহ" : "Registered FIR records"}
+                </div>
+              </div>
+
+              {/* 4. Active Cases */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "সক্রিয় মামলা" : "Active Cases"}
+                  </span>
+                  <FolderLock className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {cases.length > 0 || overview ? activeCasesCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "চলমান তদন্ত কার্যক্রম" : "Under active investigation"}
+                </div>
+              </div>
+
+              {/* 5. Evidence Items */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "সংরক্ষিত আলামত" : "Evidence Items"}
+                  </span>
+                  <Package className="w-4 h-4 text-teal-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {evidenceList.length > 0 || overview ? evidenceCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "ভল্ট ও ল্যাবে রক্ষিত" : "Secured in chain of custody"}
+                </div>
+              </div>
+
+              {/* 6. Cases Awaiting Review */}
+              <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs">
+                <div className="flex items-center justify-between text-slate-500 mb-2">
+                  <span className="text-xs font-semibold text-slate-600">
+                    {locale === "bn" ? "রিভিউ অপেক্ষমাণ" : "Cases Awaiting Review"}
+                  </span>
+                  <Clock className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="text-2xl font-bold text-slate-900">
+                  {cases.length > 0 ? casesAwaitingReviewCount : "Not available"}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">
+                  {locale === "bn" ? "তত্ত্বাবধায়কের মূল্যায়ন" : "Supervisory review required"}
+                </div>
+              </div>
             </div>
 
-            {recentFIRs.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-6 text-center">No recent FIR records.</p>
-            ) : (
-              <div className="space-y-3">
-                {recentFIRs.map((fir) => (
+            {/* Section 2: Workflow Summary & Cases by Status */}
+            <div className="space-y-4">
+              <WorkflowStepper />
+
+              {/* Cases by Status Breakdown */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900">
+                      {locale === "bn" ? "মামলার তদন্ত স্থিতি বণ্টন" : "Investigation Cases by Status"}
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      {locale === "bn"
+                        ? "ডেটাবেসে সংরক্ষিত প্রকৃত মামলার বর্তমান অবস্থা (রিয়েল-টাইম তথ্য)"
+                        : "Current breakdown of registered cases from database records"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-medium text-slate-500">
+                    Total: {cases.length} cases
+                  </span>
+                </div>
+
+                {cases.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    No cases registered in the database yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
+                    {Object.entries(caseStatusCounts).map(([status, count]) => {
+                      const percentage = Math.round((count / cases.length) * 100);
+                      return (
+                        <div key={status} className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-slate-700 truncate">{status}</span>
+                            <span className="text-xs font-bold text-slate-900">{count}</span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-blue-600 h-1.5 rounded-full"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-1 text-right">{percentage}%</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Section 3: Recent Complaints & Recent Cases */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Complaints */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-700" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {locale === "bn" ? "সাম্প্রতিক অভিযোগসমূহ" : "Recent Complaints"}
+                    </h3>
+                  </div>
                   <Link
-                    key={fir.fir_id}
-                    href={`/fir/${fir.fir_id}`}
-                    className="block p-3.5 bg-slate-950/60 hover:bg-slate-800/40 rounded-lg border border-slate-800 transition-colors"
+                    href="/complaints"
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-800 inline-flex items-center gap-1"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-rose-400">{fir.fir_number}</span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {formatDateTime(fir.filed_date)}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-200">{fir.crime_category}</span>
-                      <span className="text-xs text-slate-400">{fir.complainant_name || "State"}</span>
-                    </div>
+                    <span>{locale === "bn" ? "সকল অভিযোগ" : "View All"}</span>
+                    <ArrowRight className="w-3 h-3" />
                   </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
 
-          {/* Active Investigation Cases */}
-          <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FolderLock className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-200">
-                  Active Investigation Cases
-                </h2>
+                {complaints.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500">
+                    {locale === "bn" ? "কোনো অভিযোগ পাওয়া যায়নি।" : "No recent complaints recorded."}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {complaints.slice(0, 5).map((comp) => (
+                      <div key={comp.complaint_id} className="py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-blue-800">
+                              {comp.tracking_code}
+                            </span>
+                            <StatusBadge status={comp.current_status} />
+                          </div>
+                          <div className="text-xs font-medium text-slate-800 truncate mt-0.5">
+                            {comp.title}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {comp.complainant_name || "Citizen Complainant"} &bull;{" "}
+                            {formatDateTime(comp.submitted_at || comp.incident_date)}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/complaints/${comp.complaint_id}`}
+                          className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded bg-slate-50 transition shrink-0"
+                        >
+                          {locale === "bn" ? "দেখুন" : "Details"}
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <Link href="/cases" className="text-xs text-cyan-400 hover:underline">
-                View Ledger &rarr;
-              </Link>
+
+              {/* Recent Cases */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <FolderLock className="w-4 h-4 text-emerald-700" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {locale === "bn" ? "সাম্প্রতিক তদন্ত মামলা" : "Recent Investigation Cases"}
+                    </h3>
+                  </div>
+                  <Link
+                    href="/cases"
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-800 inline-flex items-center gap-1"
+                  >
+                    <span>{locale === "bn" ? "সকল মামলা" : "View All"}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+
+                {cases.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500">
+                    {locale === "bn" ? "কোনো মামলা পাওয়া যায়নি।" : "No investigation cases registered."}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {cases.slice(0, 5).map((c) => (
+                      <div key={c.case_id} className="py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-900">
+                              {c.fir_number ? `Case #${c.case_id} (${c.fir_number})` : `Case #${c.case_id}`}
+                            </span>
+                            <StatusBadge status={c.case_status || c.status || "Open"} />
+                          </div>
+                          <div className="text-xs font-medium text-slate-800 truncate mt-0.5">
+                            {c.case_title}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {c.crime_category || "General Investigation"} &bull;{" "}
+                            {c.lead_officer_name || "Lead Officer Pending"} &bull;{" "}
+                            {formatDateTime(c.opened_date)}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/cases/${c.case_id}`}
+                          className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded bg-slate-50 transition shrink-0"
+                        >
+                          {locale === "bn" ? "ডসিয়ার" : "Dossier"}
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {recentCases.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-6 text-center">No active cases registered.</p>
-            ) : (
-              <div className="space-y-3">
-                {recentCases.map((c) => (
-                  <Link
-                    key={c.case_id}
-                    href={`/cases/${c.case_id}`}
-                    className="block p-3.5 bg-slate-950/60 hover:bg-slate-800/40 rounded-lg border border-slate-800 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-200 line-clamp-1">{c.case_title}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800/60 shrink-0 ml-2">
-                        {c.case_status}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
-                      <span>Lead: {c.lead_officer_name || "Unassigned"}</span>
-                      <span className="font-mono">#{c.case_id}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+            {/* Section 4: Cases Requiring Attention & Recent Evidence Records */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Cases Requiring Attention */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {locale === "bn" ? "মনোযোগ আবশ্যক এমন মামলা" : "Cases Requiring Supervisory Attention"}
+                    </h3>
+                  </div>
+                </div>
 
-        {/* Complaints Intake Feed & GD Ledger */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Complaints Pending Assessment */}
-          <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-200">
-                  Citizen Intake & Complaints Queue
-                </h2>
+                {casesNeedingAttention.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1.5" />
+                    {locale === "bn"
+                      ? "কোনো মামলা বর্তমানে বিশেষ পর্যালোচনার অপেক্ষায় নেই।"
+                      : "No cases currently flagged for urgent supervisory review."}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {casesNeedingAttention.map((c) => (
+                      <div key={c.case_id} className="py-2.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-900">{c.case_title}</div>
+                          <div className="text-[11px] text-slate-500">
+                            Status: <span className="font-semibold text-amber-700">{c.case_status}</span> &bull; Lead: {c.lead_officer_name || "Unassigned"}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/cases/${c.case_id}`}
+                          className="px-2 py-1 text-xs text-blue-700 hover:text-blue-800 font-semibold"
+                        >
+                          Review &rarr;
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <Link href="/complaints" className="text-xs text-emerald-400 hover:underline">
-                View Queue &rarr;
-              </Link>
+
+              {/* Recent Evidence Records */}
+              <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-teal-700" />
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {locale === "bn" ? "সাম্প্রতিক সংগৃহীত আলামত" : "Recent Evidence Records"}
+                    </h3>
+                  </div>
+                  <Link
+                    href="/evidence"
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-800 inline-flex items-center gap-1"
+                  >
+                    <span>{locale === "bn" ? "সকল আলামত" : "View All"}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+
+                {evidenceList.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-500">
+                    {locale === "bn" ? "কোনো আলামত রেকর্ড পাওয়া যায়নি।" : "No evidence items recorded in database."}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {evidenceList.slice(0, 5).map((ev) => (
+                      <div key={ev.evidence_id} className="py-2.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-slate-900">
+                              EV-{ev.evidence_id}
+                            </span>
+                            <span className="text-xs font-medium text-slate-800 truncate">
+                              {ev.title}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Type: {ev.evidence_type} &bull; Location: {ev.storage_location || "Station Evidence Locker"}
+                          </div>
+                        </div>
+                        <StatusBadge status={ev.status} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-
-            {recentComplaints.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-6 text-center">No pending citizen complaints.</p>
-            ) : (
-              <div className="space-y-3">
-                {recentComplaints.map((cmp) => (
-                  <Link
-                    key={cmp.complaint_id}
-                    href={`/complaints/${cmp.complaint_id}`}
-                    className="block p-3.5 bg-slate-950/60 hover:bg-slate-800/40 rounded-lg border border-slate-800 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-emerald-400">{cmp.tracking_code}</span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {formatDateTime(cmp.submitted_at)}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-sm text-slate-200 line-clamp-1">{cmp.description}</span>
-                      <span className="text-xs font-mono text-amber-400 shrink-0 ml-2">{cmp.current_status}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* General Diary (GD) Feed */}
-          <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-sm font-bold uppercase tracking-wider font-mono text-slate-200">
-                  Station General Diary (GD)
-                </h2>
-              </div>
-              <Link href="/gd" className="text-xs text-cyan-400 hover:underline">
-                View Register &rarr;
-              </Link>
-            </div>
-
-            {recentGDs.length === 0 ? (
-              <p className="text-xs text-slate-500 italic py-6 text-center">No general diary entries recorded.</p>
-            ) : (
-              <div className="space-y-3">
-                {recentGDs.map((gd) => (
-                  <Link
-                    key={gd.gd_id}
-                    href={`/gd/${gd.gd_id}`}
-                    className="block p-3.5 bg-slate-950/60 hover:bg-slate-800/40 rounded-lg border border-slate-800 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-cyan-400">{gd.gd_number}</span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {formatDateTime(gd.gd_date)}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-sm text-slate-200 line-clamp-1">{gd.subject}</span>
-                      <span className="text-xs text-slate-400 shrink-0 ml-2">{gd.complainant_name || "State"}</span>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
-    </PortalLayout>
+    </AppShell>
   );
 }
